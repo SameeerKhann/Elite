@@ -102,9 +102,21 @@ function renderPage(page, admin, data) {
         <table><thead><tr><th>Employee</th><th>Machine</th><th>Logged in</th></tr></thead><tbody>${online}</tbody></table>
       </div>
       <div class="card">
+        <h3 style="margin-top:0">📥 Agent app (install on each PC)</h3>
+        <p class="muted">Download the Elite kiosk installer and run it on every agent computer. Once installed it auto-starts, locks the screen to your dialer, and can only be closed with the exit code.</p>
+        ${data.agentDownloadUrl
+          ? `<a class="btn" href="${esc(data.agentDownloadUrl)}" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none">⬇ Download Agent App (.exe)</a>`
+          : `<p class="muted"><i>No installer link set yet — paste the download URL below and Save.</i></p>`}
+        <div style="margin-top:12px">
+          <label>Installer download URL</label>
+          <input form="kioskSettings" type="text" name="agent_download_url" value="${esc(data.agentDownloadUrl || '')}" placeholder="https://…/Elite-Agent-Setup.exe">
+        </div>
+      </div>
+
+      <div class="card">
         <h3 style="margin-top:0">Kiosk settings</h3>
         <p class="muted">The Dialer URL and the list of allowed websites pushed to every kiosk. Changes apply on each employee's next login.</p>
-        <form method="post" action="/admin/settings">
+        <form id="kioskSettings" method="post" action="/admin/settings">
           <label>Websites (tabs) — one per line. Each opens as a tab; the first is the Dialer.</label>
           <textarea name="tabs" rows="4" placeholder="Dialer | https://elitetrackers.i5.tel/agc/vicidial.php&#10;CRM | https://crm.company.com&#10;https://wiki.company.com">${esc(data.tabsText)}</textarea>
           <div class="help">

@@ -14,15 +14,18 @@
     "electron-builder": "^24.13.3"
   },
   "build": {
-    "appId": "com.company.dialerkiosk",
-    "productName": "DialerKiosk",
+    "appId": "com.elite.agent",
+    "productName": "Elite Agent",
+    "artifactName": "Elite-Agent-Setup-${version}.${ext}",
     "win": {
       "target": "nsis"
     },
     "nsis": {
       "oneClick": false,
       "perMachine": true,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "runAfterFinish": true,
+      "createDesktopShortcut": false
     },
     "files": ["src/**/*", "config.json"]
   }

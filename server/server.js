@@ -193,13 +193,14 @@ app.post('/admin/logout', requireAdmin, (req, res) => {
 app.get('/', (req, res) => res.redirect('/admin'));
 
 app.get('/admin', requireAdmin, async (req, res) => {
-  const [totalEmployees, activeShifts, onlineNow, tabs, allowedDomains] = await Promise.all([
-    store.countEmployees(), store.countOpenShifts(), store.listOpenShifts(), getTabs(), store.getSetting('allowed_domains'),
+  const [totalEmployees, activeShifts, onlineNow, tabs, allowedDomains, agentDownloadUrl] = await Promise.all([
+    store.countEmployees(), store.countOpenShifts(), store.listOpenShifts(), getTabs(),
+    store.getSetting('allowed_domains'), store.getSetting('agent_download_url'),
   ]);
   res.send(renderPage('dashboard', req.admin, {
     totalEmployees, activeShifts, onlineNow,
     tabsText: tabs.map(t => `${t.label} | ${t.url}`).join('\n'),
-    allowedDomains,
+    allowedDomains, agentDownloadUrl,
   }));
 });
 
@@ -242,6 +243,9 @@ app.post('/admin/settings', requireAdmin, async (req, res) => {
   await store.setSetting('tabs', JSON.stringify(tabs));
   await store.setSetting('dialer_url', tabs[0] ? tabs[0].url : '');
   await store.setSetting('allowed_domains', domains);
+  if (req.body.agent_download_url !== undefined) {
+    await store.setSetting('agent_download_url', String(req.body.agent_download_url || '').trim());
+  }
   res.redirect('/admin');
 });
 

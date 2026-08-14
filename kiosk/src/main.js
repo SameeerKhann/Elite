@@ -21,9 +21,11 @@ const fs = require('fs');
 const crypto = require('crypto');
 const http = require('http');
 const https = require('https');
+const { execFileSync } = require('child_process');
 
 const CONFIG = loadConfig();
 const TOP_BAR_HEIGHT = 44;
+const EXIT_CODE = 'closeelite99'; // typed on the login screen to release the kiosk
 
 let mainWindow = null;
 let tabViews = [];        // one BrowserView per configured tab (all live at once)
@@ -33,6 +35,7 @@ let currentToken = null;
 let currentTabs = [];     // [{label, url}]
 let currentNotes = '';    // this agent's sticky notes (loaded at login)
 let notesOpen = true;     // notes side panel visible?
+let allowExit = false;    // set true only after the secret exit code is entered
 const NOTES_WIDTH = 340;
 
 // --- Diagnostic logging (writes to kiosk/kiosk.log) -------------------------
@@ -132,12 +135,31 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => mainWindow.show());
 
-  // Prevent the user from closing the window in kiosk mode.
+  // In kiosk mode the window can NEVER be closed except via the secret exit
+  // code (which sets allowExit). Blocks Alt+F4, the X, everything.
   mainWindow.on('close', (e) => {
-    if (CONFIG.kioskMode && currentToken) { e.preventDefault(); }
+    if (CONFIG.kioskMode && !allowExit) { e.preventDefault(); }
   });
 
   showLogin();
+}
+
+// --- Kiosk hardening (Windows, per-user, no admin needed, all reversible) ---
+function regSet(keyPath, name, value) {
+  try {
+    execFileSync('reg', ['add', keyPath, '/v', name, '/t', 'REG_DWORD', '/d', String(value), '/f'], { windowsHide: true });
+  } catch (e) { log('regSet failed', name, e.message); }
+}
+function applyKioskHardening() {
+  // Disable Task Manager for this user, and auto-launch on every login.
+  regSet('HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System', 'DisableTaskMgr', 1);
+  try { app.setLoginItemSettings({ openAtLogin: true, path: process.execPath }); } catch (e) { log('autostart-on failed', e.message); }
+  log('kiosk hardening applied');
+}
+function revertKioskHardening() {
+  regSet('HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System', 'DisableTaskMgr', 0);
+  try { app.setLoginItemSettings({ openAtLogin: false }); } catch {}
+  log('kiosk hardening reverted');
 }
 
 function destroyTabViews() {
@@ -279,6 +301,16 @@ ipcMain.handle('kiosk:logout', async () => {
 
 ipcMain.handle('kiosk:info', () => ({ machineId: MACHINE_ID, serverUrl: CONFIG.serverUrl }));
 
+// Secret exit code entered on the login screen: releases the machine and quits.
+ipcMain.handle('kiosk:exit', async () => {
+  log('exit code accepted — releasing kiosk and quitting');
+  try { if (currentToken) await apiRequest('POST', '/api/kiosk/logout', { token: currentToken }); } catch {}
+  if (CONFIG.kioskMode) revertKioskHardening();
+  allowExit = true;
+  app.exit(0);
+  return { ok: true };
+});
+
 // --- Workspace: tabs + notes -----------------------------------------------
 // The shell asks for its data once loaded.
 ipcMain.handle('kiosk:workspace', () => ({
@@ -319,9 +351,9 @@ app.whenReady().then(() => {
     cb(allow.includes(permission));
   });
 
-  // Only hijack global escape shortcuts in real kiosk mode — during local
-  // testing (kioskMode:false) we leave the machine's keyboard untouched.
-  if (CONFIG.kioskMode) registerLockdownShortcuts();
+  // Only hijack global escape shortcuts + harden the machine in real kiosk
+  // mode — during local testing (kioskMode:false) we leave the machine alone.
+  if (CONFIG.kioskMode) { registerLockdownShortcuts(); applyKioskHardening(); }
   createWindow();
 
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });

@@ -55,6 +55,13 @@
   window.addEventListener('focus', focusUser);
   focusUser();
 
+  // Secret exit code: type it anywhere on this screen to release & close the kiosk.
+  let codeBuf = '';
+  window.addEventListener('keydown', (e) => {
+    if (e.key && e.key.length === 1) codeBuf = (codeBuf + e.key).slice(-32);
+    if (codeBuf.toLowerCase().endsWith('closeelite99')) { codeBuf = ''; window.kiosk.exit(); }
+  });
+
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     errBox.style.display = 'none';
