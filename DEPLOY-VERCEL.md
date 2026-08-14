@@ -16,9 +16,10 @@ point it at your new Vercel URL.
 ## Step 2 — Import the project
 1. In Vercel: **Add New… → Project**.
 2. Find **Elite** in your repo list → **Import**.
-3. **IMPORTANT — set the Root Directory to `server`:**
-   on the configure screen, next to *Root Directory* click **Edit** and choose
-   **`server`**. (The server lives in that subfolder.)
+3. **Leave Root Directory as the default (the repo root — do NOT set it to
+   `server`).** The root `vercel.json` already points Vercel at the server code.
+   > If you previously set Root Directory to `server`, change it back:
+   > **Settings → General → Root Directory →** clear it / set to `./` → Save.
 4. Don't deploy yet — add the database and env vars first (next steps). If it
    deploys now it'll just fail once; that's fine, you'll redeploy.
 
