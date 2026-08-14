@@ -77,12 +77,15 @@ async function init() {
       value TEXT NOT NULL)`);
     await pgAll(`CREATE TABLE IF NOT EXISTS messages (
       id SERIAL PRIMARY KEY,
+      thread TEXT NOT NULL DEFAULT 'group',
       employee_id INTEGER NOT NULL,
       username TEXT NOT NULL,
       body TEXT NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
-    // Defensive: add notes column if this DB predates it.
+    // Defensive migrations for databases created before these columns existed.
     await pgAll(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS notes TEXT NOT NULL DEFAULT ''`);
+    await pgAll(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS thread TEXT NOT NULL DEFAULT 'group'`);
+    await pgAll(`CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages (thread, id)`);
   } else {
     sqlite().exec(`
       CREATE TABLE IF NOT EXISTS admins (
@@ -99,11 +102,12 @@ async function init() {
         login_at TEXT NOT NULL DEFAULT (datetime('now')), logout_at TEXT);
       CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS messages (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id INTEGER NOT NULL,
-        username TEXT NOT NULL, body TEXT NOT NULL,
+        id INTEGER PRIMARY KEY AUTOINCREMENT, thread TEXT NOT NULL DEFAULT 'group',
+        employee_id INTEGER NOT NULL, username TEXT NOT NULL, body TEXT NOT NULL,
         created_at TEXT NOT NULL DEFAULT (datetime('now')));
     `);
     try { sqlite().exec("ALTER TABLE employees ADD COLUMN notes TEXT NOT NULL DEFAULT ''"); } catch {}
+    try { sqlite().exec("ALTER TABLE messages ADD COLUMN thread TEXT NOT NULL DEFAULT 'group'"); } catch {}
   }
 
   // Seed default settings (only if missing).
@@ -240,22 +244,22 @@ async function listShifts(limit = 500) {
 // ---------------------------------------------------------------------------
 // Elite Internal — team chat (append-only; auto-purged after 7 days)
 // ---------------------------------------------------------------------------
-async function addMessage(employeeId, username, body) {
+async function addMessage(employeeId, username, body, thread = 'group') {
   if (isPg) {
-    const row = await pgOne('INSERT INTO messages (employee_id, username, body) VALUES ($1, $2, $3) RETURNING id', [employeeId, username, body]);
+    const row = await pgOne('INSERT INTO messages (thread, employee_id, username, body) VALUES ($1, $2, $3, $4) RETURNING id', [thread, employeeId, username, body]);
     return row.id;
   }
-  return Number(sqlRun('INSERT INTO messages (employee_id, username, body) VALUES (?, ?, ?)', [employeeId, username, body]).lastInsertRowid);
+  return Number(sqlRun('INSERT INTO messages (thread, employee_id, username, body) VALUES (?, ?, ?, ?)', [thread, employeeId, username, body]).lastInsertRowid);
 }
-async function listMessages(sinceId = 0, limit = 100) {
+async function listMessages(thread = 'group', sinceId = 0, limit = 100) {
   sinceId = Number(sinceId) || 0;
   if (isPg) {
     const ts = `to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`;
-    if (sinceId > 0) return await pgAll(`SELECT id, username, body, ${ts} AS created_at FROM messages WHERE id > $1 ORDER BY id ASC LIMIT $2`, [sinceId, limit]);
-    return (await pgAll(`SELECT id, username, body, ${ts} AS created_at FROM messages ORDER BY id DESC LIMIT $1`, [limit])).reverse();
+    if (sinceId > 0) return await pgAll(`SELECT id, username, body, ${ts} AS created_at FROM messages WHERE thread = $1 AND id > $2 ORDER BY id ASC LIMIT $3`, [thread, sinceId, limit]);
+    return (await pgAll(`SELECT id, username, body, ${ts} AS created_at FROM messages WHERE thread = $1 ORDER BY id DESC LIMIT $2`, [thread, limit])).reverse();
   }
-  if (sinceId > 0) return sqlAll('SELECT id, username, body, created_at FROM messages WHERE id > ? ORDER BY id ASC LIMIT ?', [sinceId, limit]);
-  return sqlAll('SELECT id, username, body, created_at FROM messages ORDER BY id DESC LIMIT ?', [limit]).reverse();
+  if (sinceId > 0) return sqlAll('SELECT id, username, body, created_at FROM messages WHERE thread = ? AND id > ? ORDER BY id ASC LIMIT ?', [thread, sinceId, limit]);
+  return sqlAll('SELECT id, username, body, created_at FROM messages WHERE thread = ? ORDER BY id DESC LIMIT ?', [thread, limit]).reverse();
 }
 // 7-day retention: called opportunistically whenever a message is sent.
 async function purgeOldMessages() {

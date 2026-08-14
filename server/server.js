@@ -157,14 +157,41 @@ app.get('/api/kiosk/config', async (req, res) => {
 });
 
 // --- Elite Internal (team chat) --------------------------------------------
+// A conversation is either the shared 'group' channel (everyone) or a 1-to-1
+// DM. The DM thread key is derived from the two employee ids so both sides
+// always resolve to the same thread. `to` is 'group' or the other person's id.
+function resolveThread(selfId, to) {
+  if (to === 'group' || to == null || to === '') return { ok: true, thread: 'group' };
+  const other = Number(to);
+  if (!Number.isInteger(other) || other <= 0 || other === selfId) return { ok: false };
+  return { ok: true, thread: `dm:${Math.min(selfId, other)}-${Math.max(selfId, other)}` };
+}
+
+// Who can I message? The group plus every other active employee.
+app.post('/api/kiosk/chat/contacts', async (req, res) => {
+  const { token } = req.body || {};
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    const emps = await store.listEmployees();
+    const contacts = emps
+      .filter(e => e.active && e.id !== payload.sub)
+      .map(e => ({ id: e.id, username: e.username, fullName: e.full_name }));
+    res.json({ ok: true, self: { id: payload.sub, username: payload.username }, contacts });
+  } catch {
+    res.status(401).json({ ok: false, contacts: [] });
+  }
+});
+
 // Send a message (text only; append-only — no edit/delete anywhere).
 app.post('/api/kiosk/chat/send', async (req, res) => {
-  const { token, text } = req.body || {};
+  const { token, to, text } = req.body || {};
   const body = String(text == null ? '' : text).trim();
   if (!body) return res.json({ ok: true });
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    await store.addMessage(payload.sub, payload.username, body.slice(0, 2000));
+    const r = resolveThread(payload.sub, to);
+    if (!r.ok) return res.status(400).json({ ok: false, error: 'Invalid recipient.' });
+    await store.addMessage(payload.sub, payload.username, body.slice(0, 2000), r.thread);
     store.purgeOldMessages().catch(() => {}); // 7-day retention, fire-and-forget
     res.json({ ok: true });
   } catch {
@@ -172,12 +199,14 @@ app.post('/api/kiosk/chat/send', async (req, res) => {
   }
 });
 
-// Fetch messages (all newer than sinceId, or the latest 100 when sinceId=0).
+// Fetch a conversation's messages (newer than sinceId, or the latest 100).
 app.post('/api/kiosk/chat/list', async (req, res) => {
-  const { token, sinceId } = req.body || {};
+  const { token, to, sinceId } = req.body || {};
   try {
-    jwt.verify(token, JWT_SECRET);
-    const messages = await store.listMessages(sinceId, 100);
+    const payload = jwt.verify(token, JWT_SECRET);
+    const r = resolveThread(payload.sub, to);
+    if (!r.ok) return res.status(400).json({ ok: false, messages: [] });
+    const messages = await store.listMessages(r.thread, sinceId, 100);
     res.json({ ok: true, messages });
   } catch {
     res.status(401).json({ ok: false, error: 'Session expired.' });

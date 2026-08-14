@@ -319,16 +319,26 @@ ipcMain.handle('kiosk:logout', async () => {
 ipcMain.handle('kiosk:info', () => ({ machineId: MACHINE_ID, serverUrl: CONFIG.serverUrl }));
 
 // --- Elite Internal chat (used by chat.html via chat-preload.js) ------------
-ipcMain.handle('chat:me', () => (currentEmployee ? (currentEmployee.fullName || currentEmployee.username) : ''));
+ipcMain.handle('chat:me', () => ({
+  username: currentEmployee ? currentEmployee.username : '',
+  name: currentEmployee ? (currentEmployee.fullName || currentEmployee.username) : '',
+}));
 
-ipcMain.handle('chat:send', async (_e, text) => {
-  try { await apiRequest('POST', '/api/kiosk/chat/send', { token: currentToken, text }); return { ok: true }; }
+ipcMain.handle('chat:contacts', async () => {
+  try {
+    const { json } = await apiRequest('POST', '/api/kiosk/chat/contacts', { token: currentToken });
+    return json && json.ok ? json : { ok: false, contacts: [] };
+  } catch (err) { log('chat contacts error', err.message); return { ok: false, contacts: [] }; }
+});
+
+ipcMain.handle('chat:send', async (_e, { to, text }) => {
+  try { await apiRequest('POST', '/api/kiosk/chat/send', { token: currentToken, to, text }); return { ok: true }; }
   catch (err) { log('chat send error', err.message); return { ok: false }; }
 });
 
-ipcMain.handle('chat:list', async (_e, sinceId) => {
+ipcMain.handle('chat:list', async (_e, { to, sinceId }) => {
   try {
-    const { json } = await apiRequest('POST', '/api/kiosk/chat/list', { token: currentToken, sinceId: Number(sinceId) || 0 });
+    const { json } = await apiRequest('POST', '/api/kiosk/chat/list', { token: currentToken, to, sinceId: Number(sinceId) || 0 });
     return json && json.ok ? json : { ok: false, messages: [] };
   } catch (err) { log('chat list error', err.message); return { ok: false, messages: [] }; }
 });

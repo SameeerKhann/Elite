@@ -5,16 +5,27 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
 <title>Elite Internal</title>
 <style>
-  :root { --bg:#0b1220; --panel:#111c33; --line:#334155; --text:#e2e8f0; --muted:#94a3b8;
-          --accent:#3b82f6; --mine:#1d4ed8; --bubble:#1e293b; }
+  :root { --bg:#0b1220; --panel:#111c33; --side:#0e1830; --line:#334155; --text:#e2e8f0; --muted:#94a3b8;
+          --accent:#3b82f6; --mine:#1d4ed8; --bubble:#1e293b; --active:#1e293b; }
   * { box-sizing:border-box; }
   html,body { margin:0; height:100%; background:var(--bg); color:var(--text);
               font-family:system-ui,Segoe UI,Roboto,sans-serif; }
-  body { display:flex; flex-direction:column; height:100vh; }
-  header { padding:12px 16px; border-bottom:1px solid var(--line); background:var(--panel);
-           display:flex; align-items:center; gap:10px; }
-  header .title { font-weight:700; font-size:15px; }
-  header .sub { color:var(--muted); font-size:12px; }
+  body { display:flex; height:100vh; }
+
+  /* Sidebar */
+  .side { width:220px; min-width:220px; background:var(--side); border-right:1px solid var(--line);
+          display:flex; flex-direction:column; overflow-y:auto; }
+  .side .brand { padding:14px 16px; font-weight:700; font-size:15px; border-bottom:1px solid var(--line); }
+  .side .sec { padding:14px 16px 6px; font-size:11px; letter-spacing:.6px; color:var(--muted); text-transform:uppercase; }
+  .conv { padding:9px 16px; cursor:pointer; font-size:14px; display:flex; flex-direction:column; gap:2px; }
+  .conv:hover { background:#152241; }
+  .conv.active { background:var(--active); border-left:3px solid var(--accent); padding-left:13px; }
+  .conv .name { font-weight:600; }
+  .conv .u { font-size:11px; color:var(--muted); }
+
+  /* Conversation pane */
+  .main { flex:1; display:flex; flex-direction:column; min-width:0; }
+  .main header { padding:13px 18px; border-bottom:1px solid var(--line); background:var(--panel); font-weight:700; font-size:15px; }
   #list { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:10px; }
   .msg { max-width:72%; padding:8px 12px; border-radius:12px; background:var(--bubble); }
   .msg .who { font-size:11px; color:var(--muted); margin-bottom:3px; }
@@ -23,40 +34,50 @@
   .msg.mine { align-self:flex-end; background:var(--mine); }
   .msg.mine .who { color:#dbeafe; }
   .empty { color:var(--muted); text-align:center; margin:auto; font-size:13px; }
-  form { display:flex; gap:8px; padding:12px 16px; border-top:1px solid var(--line); background:var(--panel); }
+  .note { padding:6px 18px; font-size:11px; color:var(--muted); background:var(--panel); }
+  form { display:flex; gap:8px; padding:12px 18px; border-top:1px solid var(--line); background:var(--panel); }
   #text { flex:1; resize:none; padding:11px 13px; border-radius:10px; border:1px solid var(--line);
           background:#0b1220; color:var(--text); font:inherit; font-size:14px; max-height:120px; }
   #text:focus { outline:2px solid var(--accent); border-color:var(--accent); }
   button { border:0; border-radius:10px; background:var(--accent); color:#fff; font-weight:600;
            padding:0 18px; cursor:pointer; font-size:14px; }
   button:disabled { opacity:.6; cursor:default; }
-  .note { padding:6px 16px; font-size:11px; color:var(--muted); background:var(--panel); }
 </style>
 </head>
 <body>
-  <header>
-    <span class="title">💬 Elite Internal</span>
-    <span class="sub">Team chat — messages are permanent for 7 days</span>
-  </header>
-  <div id="list"><div class="empty" id="empty">Loading messages…</div></div>
-  <div class="note">Text only. Messages can't be edited or deleted, and are automatically removed after 7 days.</div>
-  <form id="form">
-    <textarea id="text" rows="1" placeholder="Type a message…  (Enter to send, Shift+Enter for a new line)"></textarea>
-    <button id="send" type="submit">Send</button>
-  </form>
+  <div class="side">
+    <div class="brand">💬 Elite Internal</div>
+    <div class="sec">Channel</div>
+    <div id="channels"></div>
+    <div class="sec">Direct messages</div>
+    <div id="contacts"><div class="conv"><span class="u">Loading…</span></div></div>
+  </div>
+
+  <div class="main">
+    <header id="convTitle"># General</header>
+    <div id="list"><div class="empty" id="empty">Loading…</div></div>
+    <div class="note">Text only. Messages can't be edited or deleted, and are removed automatically after 7 days.</div>
+    <form id="form">
+      <textarea id="text" rows="1" placeholder="Type a message…  (Enter to send, Shift+Enter for new line)"></textarea>
+      <button id="send" type="submit">Send</button>
+    </form>
+  </div>
 
 <script>
+  const channelsEl = document.getElementById('channels');
+  const contactsEl = document.getElementById('contacts');
   const listEl = document.getElementById('list');
   const emptyEl = document.getElementById('empty');
+  const convTitle = document.getElementById('convTitle');
   const form = document.getElementById('form');
   const textEl = document.getElementById('text');
   const sendBtn = document.getElementById('send');
 
-  let me = '';
+  let me = { username: '', name: '' };
+  let currentTo = 'group';
+  let currentLabel = '# General';
   let lastId = 0;
   let seen = false;
-
-  window.chat.me().then(name => { me = name || ''; });
 
   function fmtTime(iso) {
     try {
@@ -66,16 +87,30 @@
     } catch { return ''; }
   }
 
-  function render(messages) {
-    if (!messages || !messages.length) return;
+  function selectConversation(to, label, el) {
+    currentTo = to; currentLabel = label; lastId = 0; seen = false;
+    convTitle.textContent = label;
+    listEl.innerHTML = '<div class="empty" id="empty">Loading…</div>';
+    document.querySelectorAll('.conv').forEach(c => c.classList.remove('active'));
+    if (el) el.classList.add('active');
+    textEl.focus();
+    poll();
+  }
+
+  function renderMessages(messages, to) {
+    if (to !== currentTo) return; // stale response from a previous conversation
+    if (!messages || !messages.length) {
+      if (!seen && lastId === 0) { listEl.innerHTML = '<div class="empty">No messages yet. Say hello 👋</div>'; }
+      return;
+    }
     if (!seen) { listEl.innerHTML = ''; seen = true; }
     const atBottom = listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight < 80;
     for (const m of messages) {
       if (m.id <= lastId) continue;
       lastId = m.id;
       const el = document.createElement('div');
-      el.className = 'msg' + (m.username === me || m.username === (me || '').toLowerCase() ? ' mine' : '');
-      const who = document.createElement('div'); who.className = 'who'; who.textContent = m.username;
+      el.className = 'msg' + (m.username === me.username ? ' mine' : '');
+      const who = document.createElement('div'); who.className = 'who'; who.textContent = m.username === me.username ? 'You' : m.username;
       const body = document.createElement('div'); body.className = 'body'; body.textContent = m.body;
       const time = document.createElement('div'); time.className = 'time'; time.textContent = fmtTime(m.created_at);
       el.appendChild(who); el.appendChild(body); el.appendChild(time);
@@ -85,16 +120,9 @@
   }
 
   async function poll() {
-    const res = await window.chat.list(lastId);
-    if (res && res.messages) {
-      render(res.messages);
-      if (seen && !res.messages.length && lastId === 0) {
-        emptyEl.textContent = 'No messages yet. Say hello 👋';
-      }
-    }
-    if (lastId === 0 && (!res || !res.messages || !res.messages.length)) {
-      emptyEl.textContent = 'No messages yet. Say hello 👋';
-    }
+    const to = currentTo;
+    const res = await window.chat.list(to, lastId);
+    renderMessages(res && res.messages, to);
   }
 
   async function sendNow() {
@@ -102,7 +130,7 @@
     if (!t) return;
     sendBtn.disabled = true;
     textEl.value = '';
-    await window.chat.send(t);
+    await window.chat.send(currentTo, t);
     await poll();
     sendBtn.disabled = false;
     textEl.focus();
@@ -113,8 +141,41 @@
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendNow(); }
   });
 
-  poll();
-  setInterval(poll, 3000); // live updates
+  function renderChannels() {
+    channelsEl.innerHTML = '';
+    const el = document.createElement('div');
+    el.className = 'conv active';
+    el.innerHTML = '<span class="name"># General</span><span class="u">Everyone</span>';
+    el.addEventListener('click', () => selectConversation('group', '# General', el));
+    channelsEl.appendChild(el);
+  }
+
+  async function loadContacts() {
+    const res = await window.chat.contacts();
+    const contacts = (res && res.contacts) || [];
+    contactsEl.innerHTML = '';
+    if (!contacts.length) {
+      contactsEl.innerHTML = '<div class="conv"><span class="u">No other employees yet</span></div>';
+      return;
+    }
+    for (const c of contacts) {
+      const label = c.fullName || c.username;
+      const el = document.createElement('div');
+      el.className = 'conv';
+      el.innerHTML = `<span class="name">${label.replace(/</g,'&lt;')}</span><span class="u">@${c.username.replace(/</g,'&lt;')}</span>`;
+      el.addEventListener('click', () => selectConversation(c.id, 'Direct message · ' + label, el));
+      contactsEl.appendChild(el);
+    }
+  }
+
+  (async () => {
+    me = await window.chat.me();
+    renderChannels();
+    await loadContacts();
+    selectConversation('group', '# General', channelsEl.firstChild);
+    setInterval(poll, 3000);       // live messages for the open conversation
+    setInterval(loadContacts, 20000); // pick up newly added employees
+  })();
 </script>
 </body>
 </html>

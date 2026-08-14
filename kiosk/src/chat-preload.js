@@ -4,6 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('chat', {
   me: () => ipcRenderer.invoke('chat:me'),
-  send: (text) => ipcRenderer.invoke('chat:send', text),
-  list: (sinceId) => ipcRenderer.invoke('chat:list', sinceId),
+  contacts: () => ipcRenderer.invoke('chat:contacts'),
+  send: (to, text) => ipcRenderer.invoke('chat:send', { to, text }),
+  list: (to, sinceId) => ipcRenderer.invoke('chat:list', { to, sinceId }),
 });
