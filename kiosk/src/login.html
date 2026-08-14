@@ -1,0 +1,76 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
+<title>Shift Login</title>
+<style>
+  :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#e2e8f0; --muted:#94a3b8; --accent:#3b82f6; --bad:#ef4444; }
+  * { box-sizing:border-box; -webkit-user-select:none; user-select:none; }
+  html,body { height:100%; margin:0; }
+  body { font-family:system-ui,Segoe UI,Roboto,sans-serif; background:radial-gradient(circle at 50% 30%, #16233f, var(--bg));
+         color:var(--text); display:flex; align-items:center; justify-content:center; }
+  .card { width:380px; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:32px; box-shadow:0 20px 60px rgba(0,0,0,.4); }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:var(--muted); font-size:13px; margin-bottom:24px; }
+  label { display:block; font-size:13px; color:var(--muted); margin:14px 0 6px; }
+  input { width:100%; padding:12px 14px; border-radius:10px; border:1px solid var(--line);
+          background:#0b1220; color:var(--text); font-size:15px; user-select:text; -webkit-user-select:text; }
+  input:focus { outline:2px solid var(--accent); border-color:var(--accent); }
+  button { width:100%; margin-top:22px; padding:13px; border:0; border-radius:10px; background:var(--accent);
+           color:#fff; font-size:16px; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.6; cursor:default; }
+  .error { background:rgba(239,68,68,.12); border:1px solid var(--bad); color:#fecaca;
+           padding:10px 12px; border-radius:8px; font-size:13px; margin-top:16px; display:none; }
+  .foot { margin-top:20px; font-size:11px; color:var(--muted); text-align:center; }
+  .lock { font-size:34px; text-align:center; margin-bottom:8px; }
+</style>
+</head>
+<body>
+  <form class="card" id="form" autocomplete="off">
+    <div class="lock">🔒</div>
+    <h1>Start your shift</h1>
+    <div class="sub">Enter your work username and password to begin.</div>
+    <label>Username</label>
+    <input id="username" type="text" autocomplete="off" autofocus>
+    <label>Password</label>
+    <input id="password" type="password" autocomplete="off">
+    <div class="error" id="error"></div>
+    <button id="btn" type="submit">Log in &amp; open Dialer</button>
+    <div class="foot" id="foot"></div>
+  </form>
+
+<script>
+  const form = document.getElementById('form');
+  const btn = document.getElementById('btn');
+  const errBox = document.getElementById('error');
+
+  window.kiosk.info().then(i => {
+    document.getElementById('foot').textContent = 'Machine: ' + i.machineId;
+  });
+
+  // Ensure the username field is focused when returning here after logout.
+  function focusUser() { try { document.getElementById('username').focus(); } catch {} }
+  window.addEventListener('load', focusUser);
+  window.addEventListener('focus', focusUser);
+  focusUser();
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errBox.style.display = 'none';
+    const u = document.getElementById('username').value.trim();
+    const p = document.getElementById('password').value;
+    if (!u || !p) { showError('Enter your username and password.'); return; }
+    btn.disabled = true; btn.textContent = 'Checking…';
+    const res = await window.kiosk.login(u, p);
+    if (!res.ok) {
+      showError(res.error || 'Login failed.');
+      btn.disabled = false; btn.textContent = 'Log in & open Dialer';
+    }
+    // On success the main process swaps to the Dialer automatically.
+  });
+
+  function showError(msg) { errBox.textContent = msg; errBox.style.display = 'block'; }
+</script>
+</body>
+</html>

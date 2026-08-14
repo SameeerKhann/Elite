@@ -1,0 +1,138 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
+<title>DialerKiosk</title>
+<style>
+  :root { --bar:#0f172a; --panel:#111c33; --line:#334155; --text:#e2e8f0; --muted:#94a3b8;
+          --accent:#3b82f6; --bad:#ef4444; --good:#22c55e; --note:#1c2942; }
+  * { box-sizing:border-box; -webkit-user-select:none; user-select:none; }
+  html,body { margin:0; height:100%; background:#0b1220; color:var(--text);
+              font-family:system-ui,Segoe UI,Roboto,sans-serif; overflow:hidden; }
+
+  /* Top bar (height must match TOP_BAR_HEIGHT in main.js) */
+  .bar { height:44px; display:flex; align-items:center; gap:14px;
+         padding:0 12px; background:var(--bar); border-bottom:1px solid var(--line); }
+  .lock { font-size:16px; }
+  .tabs { display:flex; gap:6px; }
+  .tab { background:#1e293b; color:var(--muted); border:1px solid var(--line); border-radius:8px;
+         padding:6px 14px; font-size:13px; font-weight:600; cursor:pointer; }
+  .tab.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .spacer { flex:1; }
+  .who { color:var(--muted); font-size:13px; }
+  .who b { color:var(--text); }
+  .clock { color:var(--muted); font-size:13px; font-variant-numeric:tabular-nums; }
+  .btn { border:0; border-radius:8px; padding:7px 13px; font-weight:600; cursor:pointer; font-size:13px; }
+  .btn.notes { background:#1e293b; color:var(--text); border:1px solid var(--line); }
+  .btn.notes.on { background:var(--good); color:#052e16; border-color:var(--good); }
+  .btn.logout { background:var(--bad); color:#fff; }
+
+  /* Notes side panel — sits on the right; its width must match NOTES_WIDTH (340). */
+  .notes { position:fixed; top:44px; right:0; bottom:0; width:340px; background:var(--panel);
+           border-left:1px solid var(--line); display:flex; flex-direction:column; }
+  body.notes-closed .notes { display:none; }
+  .notes h3 { margin:0; padding:12px 14px 6px; font-size:14px; display:flex; align-items:center; gap:8px; }
+  .notes .hint { padding:0 14px 8px; font-size:11px; color:var(--muted); }
+  .notes textarea { flex:1; margin:0 12px 12px; padding:12px; resize:none; border-radius:10px;
+                    border:1px solid var(--line); background:var(--note); color:var(--text);
+                    font-size:14px; line-height:1.6; user-select:text; -webkit-user-select:text; }
+  .notes textarea:focus { outline:2px solid var(--accent); border-color:var(--accent); }
+  .status { padding:0 14px 12px; font-size:12px; color:var(--muted); height:16px; }
+  .status.saved { color:var(--good); }
+</style>
+</head>
+<body>
+  <div class="bar">
+    <span class="lock">🔒</span>
+    <div class="tabs" id="tabs"></div>
+    <div class="spacer"></div>
+    <span class="who">On shift: <b id="who">—</b></span>
+    <span class="clock" id="clock"></span>
+    <button class="btn notes on" id="notesToggle">📝 Notes</button>
+    <button class="btn logout" id="logout">End shift &amp; log out</button>
+  </div>
+
+  <!-- Active tab's website is drawn here by a locked BrowserView (main process). -->
+
+  <aside class="notes" id="notesPanel">
+    <h3>📝 Sticky Notes</h3>
+    <div class="hint">Auto-saved to your account — they follow you to any PC.</div>
+    <textarea id="noteArea" placeholder="Type or paste details here…&#10;Saved automatically."></textarea>
+    <div class="status" id="status"></div>
+  </aside>
+
+<script>
+  const params = new URLSearchParams(location.search);
+  document.getElementById('who').textContent = params.get('name') || 'Employee';
+
+  const clock = document.getElementById('clock');
+  setInterval(() => { clock.textContent = new Date().toLocaleTimeString(); }, 1000);
+
+  const tabsEl = document.getElementById('tabs');
+  const noteArea = document.getElementById('noteArea');
+  const statusEl = document.getElementById('status');
+  const notesToggle = document.getElementById('notesToggle');
+  let notesOpen = true;
+
+  // Load workspace data (tabs + saved notes) from the main process.
+  window.kiosk.workspace().then(ws => {
+    // Render one button per tab.
+    tabsEl.innerHTML = '';
+    ws.tabs.forEach((t, i) => {
+      const b = document.createElement('button');
+      b.className = 'tab' + (i === ws.activeTab ? ' active' : '');
+      b.textContent = t.label;
+      b.addEventListener('click', () => selectTab(i));
+      tabsEl.appendChild(b);
+    });
+    // Load this agent's saved notes.
+    noteArea.value = ws.notes || '';
+    notesOpen = ws.notesOpen !== false;
+    applyNotesState();
+  });
+
+  function selectTab(i) {
+    window.kiosk.switchTab(i);
+    [...tabsEl.children].forEach((el, idx) => el.classList.toggle('active', idx === i));
+  }
+
+  // --- Notes panel toggle ----------------------------------------------------
+  notesToggle.addEventListener('click', () => {
+    notesOpen = !notesOpen;
+    window.kiosk.setNotesPanel(notesOpen);
+    applyNotesState();
+  });
+  function applyNotesState() {
+    document.body.classList.toggle('notes-closed', !notesOpen);
+    notesToggle.classList.toggle('on', notesOpen);
+  }
+
+  // --- Auto-save notes (debounced) ------------------------------------------
+  let saveTimer = null;
+  noteArea.addEventListener('input', () => {
+    statusEl.textContent = 'Saving…';
+    statusEl.classList.remove('saved');
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveNow, 700);
+  });
+  noteArea.addEventListener('blur', saveNow);
+  async function saveNow() {
+    clearTimeout(saveTimer);
+    const res = await window.kiosk.saveNotes(noteArea.value);
+    if (res && res.ok) {
+      statusEl.textContent = 'Saved ✓ ' + new Date().toLocaleTimeString();
+      statusEl.classList.add('saved');
+    } else {
+      statusEl.textContent = 'Not saved — check connection';
+      statusEl.classList.remove('saved');
+    }
+  }
+
+  document.getElementById('logout').addEventListener('click', async () => {
+    await saveNow();
+    if (confirm('End your shift and log out?')) { await window.kiosk.logout(); }
+  });
+</script>
+</body>
+</html>

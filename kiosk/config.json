@@ -1,0 +1,5 @@
+{
+  "serverUrl": "http://localhost:4000",
+  "kioskMode": true,
+  "allowDevTools": false
+}

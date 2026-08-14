@@ -1,0 +1,22 @@
+{
+  "name": "dialerkiosk-server",
+  "version": "0.1.0",
+  "description": "Central server for DialerKiosk: employee accounts, auth API, shift logging, admin panel.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "init-admin": "node scripts/create-admin.js"
+  },
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.6",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "jsonwebtoken": "^9.0.2",
+    "nanoid": "^3.3.7"
+  }
+}

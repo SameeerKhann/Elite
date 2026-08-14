@@ -1,0 +1,29 @@
+{
+  "name": "dialerkiosk-client",
+  "version": "0.1.0",
+  "description": "Fullscreen kiosk client that locks a PC to the company Dialer after employee login.",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win"
+  },
+  "license": "UNLICENSED",
+  "private": true,
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.company.dialerkiosk",
+    "productName": "DialerKiosk",
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true
+    },
+    "files": ["src/**/*", "config.json"]
+  }
+}
