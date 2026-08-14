@@ -32,7 +32,8 @@ let tabViews = [];        // one BrowserView per configured tab (all live at onc
 let activeTab = 0;
 let allowedDomains = [];
 let currentToken = null;
-let currentTabs = [];     // [{label, url}]
+let currentTabs = [];     // [{label, url}] (+ a synthetic {label,chat:true} tab)
+let currentEmployee = null; // {username, fullName}
 let currentNotes = '';    // this agent's sticky notes (loaded at login)
 let notesOpen = true;     // notes side panel visible?
 let allowExit = false;    // set true only after the secret exit code is entered
@@ -193,7 +194,10 @@ function showLogin() {
 // Open the agent workspace: the shell (top bar + notes panel) plus one locked
 // BrowserView per configured tab, all loaded at once so switching is instant.
 function showWorkspace(tabs, employee, notes) {
-  currentTabs = (tabs && tabs.length) ? tabs : [{ label: 'Dialer', url: 'about:blank' }];
+  const websiteTabs = (tabs && tabs.length) ? tabs : [{ label: 'Dialer', url: 'about:blank' }];
+  // Elite Internal is a permanent tab on every kiosk (local chat page).
+  currentTabs = [...websiteTabs, { label: 'Elite Internal', chat: true }];
+  currentEmployee = employee || null;
   currentNotes = notes || '';
   notesOpen = true;
 
@@ -203,13 +207,26 @@ function showWorkspace(tabs, employee, notes) {
 
   destroyTabViews();
   currentTabs.forEach((tab, i) => {
+    // Elite Internal: a local chat page (no domain lock; talks to the server
+    // through its own preload bridge).
+    if (tab.chat) {
+      const view = new BrowserView({
+        webPreferences: { preload: path.join(__dirname, 'chat-preload.js'), contextIsolation: true, nodeIntegration: false },
+      });
+      mainWindow.addBrowserView(view);
+      view.webContents.on('did-fail-load', (_e, code, desc) => { if (code !== -3) log('chat tab FAILED', code, desc); });
+      tabViews[i] = view;
+      view.webContents.loadFile(path.join(__dirname, 'chat.html')).catch(err => log('chat load threw', err.message));
+      return;
+    }
+
     const view = new BrowserView({
       webPreferences: { contextIsolation: true, nodeIntegration: false, partition: 'persist:dialer' },
     });
     mainWindow.addBrowserView(view);
     const wc = view.webContents;
 
-    // Lock every tab to the allowed domains.
+    // Lock every website tab to the allowed domains.
     wc.on('will-navigate', (e, url) => { if (!domainAllowed(url)) e.preventDefault(); });
     wc.on('will-redirect', (e, url) => { if (!domainAllowed(url)) e.preventDefault(); });
     wc.setWindowOpenHandler(({ url }) => {
@@ -300,6 +317,21 @@ ipcMain.handle('kiosk:logout', async () => {
 });
 
 ipcMain.handle('kiosk:info', () => ({ machineId: MACHINE_ID, serverUrl: CONFIG.serverUrl }));
+
+// --- Elite Internal chat (used by chat.html via chat-preload.js) ------------
+ipcMain.handle('chat:me', () => (currentEmployee ? (currentEmployee.fullName || currentEmployee.username) : ''));
+
+ipcMain.handle('chat:send', async (_e, text) => {
+  try { await apiRequest('POST', '/api/kiosk/chat/send', { token: currentToken, text }); return { ok: true }; }
+  catch (err) { log('chat send error', err.message); return { ok: false }; }
+});
+
+ipcMain.handle('chat:list', async (_e, sinceId) => {
+  try {
+    const { json } = await apiRequest('POST', '/api/kiosk/chat/list', { token: currentToken, sinceId: Number(sinceId) || 0 });
+    return json && json.ok ? json : { ok: false, messages: [] };
+  } catch (err) { log('chat list error', err.message); return { ok: false, messages: [] }; }
+});
 
 // Secret exit code entered on the login screen: releases the machine and quits.
 ipcMain.handle('kiosk:exit', async () => {

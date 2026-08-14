@@ -156,6 +156,34 @@ app.get('/api/kiosk/config', async (req, res) => {
   res.json({ ok: true, dialerUrl: await store.getSetting('dialer_url'), allowedDomains: await allowedDomainList() });
 });
 
+// --- Elite Internal (team chat) --------------------------------------------
+// Send a message (text only; append-only — no edit/delete anywhere).
+app.post('/api/kiosk/chat/send', async (req, res) => {
+  const { token, text } = req.body || {};
+  const body = String(text == null ? '' : text).trim();
+  if (!body) return res.json({ ok: true });
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    await store.addMessage(payload.sub, payload.username, body.slice(0, 2000));
+    store.purgeOldMessages().catch(() => {}); // 7-day retention, fire-and-forget
+    res.json({ ok: true });
+  } catch {
+    res.status(401).json({ ok: false, error: 'Session expired.' });
+  }
+});
+
+// Fetch messages (all newer than sinceId, or the latest 100 when sinceId=0).
+app.post('/api/kiosk/chat/list', async (req, res) => {
+  const { token, sinceId } = req.body || {};
+  try {
+    jwt.verify(token, JWT_SECRET);
+    const messages = await store.listMessages(sinceId, 100);
+    res.json({ ok: true, messages });
+  } catch {
+    res.status(401).json({ ok: false, error: 'Session expired.' });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Admin authentication (cookie session)
 // ---------------------------------------------------------------------------
@@ -229,11 +257,6 @@ app.post('/admin/employees/:id/reset', requireAdmin, async (req, res) => {
 app.post('/admin/employees/:id/toggle', requireAdmin, async (req, res) => {
   await store.toggleEmployee(req.params.id);
   res.redirect('/admin/employees?msg=' + encodeURIComponent('Employee updated.'));
-});
-
-app.get('/admin/shifts', requireAdmin, async (req, res) => {
-  const shifts = await store.listShifts(500);
-  res.send(renderPage('shifts', req.admin, { shifts }));
 });
 
 app.post('/admin/settings', requireAdmin, async (req, res) => {

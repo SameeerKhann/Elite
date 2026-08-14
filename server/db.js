@@ -75,10 +75,16 @@ async function init() {
     await pgAll(`CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL)`);
+    await pgAll(`CREATE TABLE IF NOT EXISTS messages (
+      id SERIAL PRIMARY KEY,
+      employee_id INTEGER NOT NULL,
+      username TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
     // Defensive: add notes column if this DB predates it.
     await pgAll(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS notes TEXT NOT NULL DEFAULT ''`);
   } else {
-    sq.exec(`
+    sqlite().exec(`
       CREATE TABLE IF NOT EXISTS admins (
         id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL,
         password_hash TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')));
@@ -92,8 +98,12 @@ async function init() {
         username TEXT NOT NULL, machine_id TEXT NOT NULL DEFAULT '',
         login_at TEXT NOT NULL DEFAULT (datetime('now')), logout_at TEXT);
       CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id INTEGER NOT NULL,
+        username TEXT NOT NULL, body TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')));
     `);
-    try { sq.exec("ALTER TABLE employees ADD COLUMN notes TEXT NOT NULL DEFAULT ''"); } catch {}
+    try { sqlite().exec("ALTER TABLE employees ADD COLUMN notes TEXT NOT NULL DEFAULT ''"); } catch {}
   }
 
   // Seed default settings (only if missing).
@@ -227,6 +237,32 @@ async function listShifts(limit = 500) {
       FROM shifts ORDER BY login_at DESC LIMIT ?`, [limit]);
 }
 
+// ---------------------------------------------------------------------------
+// Elite Internal — team chat (append-only; auto-purged after 7 days)
+// ---------------------------------------------------------------------------
+async function addMessage(employeeId, username, body) {
+  if (isPg) {
+    const row = await pgOne('INSERT INTO messages (employee_id, username, body) VALUES ($1, $2, $3) RETURNING id', [employeeId, username, body]);
+    return row.id;
+  }
+  return Number(sqlRun('INSERT INTO messages (employee_id, username, body) VALUES (?, ?, ?)', [employeeId, username, body]).lastInsertRowid);
+}
+async function listMessages(sinceId = 0, limit = 100) {
+  sinceId = Number(sinceId) || 0;
+  if (isPg) {
+    const ts = `to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`;
+    if (sinceId > 0) return await pgAll(`SELECT id, username, body, ${ts} AS created_at FROM messages WHERE id > $1 ORDER BY id ASC LIMIT $2`, [sinceId, limit]);
+    return (await pgAll(`SELECT id, username, body, ${ts} AS created_at FROM messages ORDER BY id DESC LIMIT $1`, [limit])).reverse();
+  }
+  if (sinceId > 0) return sqlAll('SELECT id, username, body, created_at FROM messages WHERE id > ? ORDER BY id ASC LIMIT ?', [sinceId, limit]);
+  return sqlAll('SELECT id, username, body, created_at FROM messages ORDER BY id DESC LIMIT ?', [limit]).reverse();
+}
+// 7-day retention: called opportunistically whenever a message is sent.
+async function purgeOldMessages() {
+  if (isPg) await pgAll("DELETE FROM messages WHERE created_at < NOW() - INTERVAL '7 days'");
+  else sqlRun("DELETE FROM messages WHERE created_at < datetime('now', '-7 days')");
+}
+
 module.exports = {
   isPg, init,
   getSetting, setSetting,
@@ -235,4 +271,5 @@ module.exports = {
   setEmployeePassword, toggleEmployee, setNotes,
   createShift, closeShift,
   countEmployees, countOpenShifts, listOpenShifts, listShifts,
+  addMessage, listMessages, purgeOldMessages,
 };

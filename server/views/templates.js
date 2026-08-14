@@ -61,7 +61,6 @@ function layout(title, admin, body) {
       <nav>
         ${nav('/admin', 'Dashboard', title === 'Dashboard')}
         ${nav('/admin/employees', 'Employees', title === 'Employees')}
-        ${nav('/admin/shifts', 'Shift Log', title === 'Shift Log')}
         <form action="/admin/logout" method="post" style="display:inline">
           <button class="btn ghost small">Log out (${esc(admin.username)})</button>
         </form>
@@ -182,25 +181,7 @@ function renderPage(page, admin, data) {
     return layout('Employees', admin, body);
   }
 
-  if (page === 'shifts') {
-    const rows = data.shifts.map(s => `
-      <tr>
-        <td>${esc(s.username)}</td>
-        <td class="muted">${esc(s.machine_id || '—')}</td>
-        <td>${esc(s.login_at)} UTC</td>
-        <td>${s.logout_at ? esc(s.logout_at) + ' UTC' : '<span class="pill on">On shift</span>'}</td>
-        <td>${s.minutes == null ? '—' : (s.minutes + ' min')}</td>
-      </tr>`).join('') || `<tr><td colspan="5" class="muted">No shifts recorded yet.</td></tr>`;
-    const body = `
-      <div class="card">
-        <h3 style="margin-top:0">Shift log <span class="muted">(latest 500)</span></h3>
-        <table><thead><tr><th>Employee</th><th>Machine</th><th>Login</th><th>Logout</th><th>Duration</th></tr></thead>
-        <tbody>${rows}</tbody></table>
-      </div>`;
-    return layout('Shift Log', admin, body);
-  }
-
-  return layout('DialerKiosk', admin, '<div class="card">Unknown page.</div>');
+  return layout('Elite', admin, '<div class="card">Unknown page.</div>');
 }
 
 module.exports = { renderPage, adminLoginPage };
