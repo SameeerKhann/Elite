@@ -108,6 +108,13 @@ async function init() {
     await createAdmin(String(process.env.ADMIN_USER).trim().toLowerCase(), bcrypt.hashSync(String(process.env.ADMIN_PASS), 10));
     console.log(`Seeded admin "${process.env.ADMIN_USER}" from ADMIN_USER/ADMIN_PASS.`);
   }
+
+  // Bootstrap admin — created only if NO admin exists yet (so it never
+  // overwrites a real one). Username "sam". Change this password soon.
+  if ((await countAdmins()) === 0) {
+    await createAdmin('sam', '$2a$10$UrIOaIO9ULb/lTS0C7FOCu.g8WyU99KsUSbxLLEqUG4r10qHyXIya'); // pw: Sam123
+    console.log('Seeded bootstrap admin "sam".');
+  }
 }
 
 // ---------------------------------------------------------------------------
