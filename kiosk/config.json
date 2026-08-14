@@ -1,5 +1,5 @@
 {
-  "serverUrl": "http://localhost:4000",
+  "serverUrl": "https://elite-l9b8.vercel.app",
   "kioskMode": true,
   "allowDevTools": false
 }
