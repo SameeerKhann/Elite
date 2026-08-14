@@ -15,25 +15,37 @@ const isPg = !!PG_URL;
 let pgPool = null;
 let sq = null;
 
-if (isPg) {
-  const { Pool } = require('pg');
-  const ssl = /localhost|127\.0\.0\.1/.test(PG_URL) ? false : { rejectUnauthorized: false };
-  pgPool = new Pool({ connectionString: PG_URL, ssl, max: 3 });
-} else {
-  const path = require('path');
-  const { DatabaseSync } = require('node:sqlite');
-  sq = new DatabaseSync(process.env.DB_PATH || path.join(__dirname, 'dialerkiosk.db'));
-  sq.exec('PRAGMA journal_mode = WAL;');
+// Postgres pool is created lazily (no connection until first query).
+function pg() {
+  if (!pgPool) {
+    const { Pool } = require('pg');
+    const ssl = /localhost|127\.0\.0\.1/.test(PG_URL) ? false : { rejectUnauthorized: false };
+    pgPool = new Pool({ connectionString: PG_URL, ssl, max: 3 });
+  }
+  return pgPool;
+}
+
+// SQLite is created lazily too — it touches the filesystem, which is read-only
+// on serverless hosts, so we must not create it at module load (that would
+// crash the whole app before it can report a useful error).
+function sqlite() {
+  if (!sq) {
+    const path = require('path');
+    const { DatabaseSync } = require('node:sqlite');
+    sq = new DatabaseSync(process.env.DB_PATH || path.join(__dirname, 'dialerkiosk.db'));
+    sq.exec('PRAGMA journal_mode = WAL;');
+  }
+  return sq;
 }
 
 // --- tiny query helpers -----------------------------------------------------
 // Postgres: async, $1 placeholders. SQLite: sync under the hood, ? placeholders.
-async function pgAll(text, params = []) { return (await pgPool.query(text, params)).rows; }
-async function pgOne(text, params = []) { return (await pgPool.query(text, params)).rows[0]; }
+async function pgAll(text, params = []) { return (await pg().query(text, params)).rows; }
+async function pgOne(text, params = []) { return (await pg().query(text, params)).rows[0]; }
 
-function sqlAll(text, params = []) { return sq.prepare(text).all(...params); }
-function sqlOne(text, params = []) { return sq.prepare(text).get(...params); }
-function sqlRun(text, params = []) { return sq.prepare(text).run(...params); }
+function sqlAll(text, params = []) { return sqlite().prepare(text).all(...params); }
+function sqlOne(text, params = []) { return sqlite().prepare(text).get(...params); }
+function sqlRun(text, params = []) { return sqlite().prepare(text).run(...params); }
 
 // ---------------------------------------------------------------------------
 // Schema + seed

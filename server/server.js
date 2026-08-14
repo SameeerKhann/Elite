@@ -22,6 +22,18 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Ensure the database schema exists before handling any request. On serverless
 // (Vercel) there is no long-lived startup, so we run init once, lazily, and
 // memoize it. Any failure is retried on the next request.
+// Diagnostics — registered BEFORE the DB gate so it works even if the DB fails.
+app.get('/health', (req, res) => {
+  res.json({
+    ok: true,
+    node: process.version,
+    onVercel: !!process.env.VERCEL,
+    dbBackend: store.isPg ? 'postgres' : 'sqlite',
+    dbUrlDetected: !!(process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL),
+    dbEnvKeys: Object.keys(process.env).filter(k => /postgres|database|neon|pg/i.test(k)),
+  });
+});
+
 let initPromise = null;
 function ensureInit() {
   if (!initPromise) initPromise = store.init().catch(err => { initPromise = null; throw err; });
@@ -29,7 +41,10 @@ function ensureInit() {
 }
 app.use(async (req, res, next) => {
   try { await ensureInit(); next(); }
-  catch (err) { console.error('DB init failed:', err); res.status(500).send('Database not ready. Please retry shortly.'); }
+  catch (err) {
+    console.error('DB init failed:', err);
+    res.status(500).send('Database not ready: ' + (err && err.message ? err.message : String(err)));
+  }
 });
 
 // ---------------------------------------------------------------------------
