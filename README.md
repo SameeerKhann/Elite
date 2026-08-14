@@ -75,6 +75,13 @@ admin panel, **Shift Log** now shows that session.
 
 ---
 
+## Cloud deployment (shared database for all PCs)
+
+To host the server + database in the cloud so every PC shares one live database,
+see **[DEPLOY-VERCEL.md](DEPLOY-VERCEL.md)** (Vercel + Neon Postgres). The data
+layer is dual-mode: **Postgres in the cloud**, **SQLite locally** — the same code
+runs both places.
+
 ## Going live
 
 1. **Host the server** somewhere every PC can reach (a small VPS or an office
