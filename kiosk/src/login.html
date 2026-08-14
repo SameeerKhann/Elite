@@ -24,6 +24,15 @@
            padding:10px 12px; border-radius:8px; font-size:13px; margin-top:16px; display:none; }
   .foot { margin-top:20px; font-size:11px; color:var(--muted); text-align:center; }
   .lock { font-size:34px; text-align:center; margin-bottom:8px; }
+  .exitwrap { margin-top:18px; text-align:center; border-top:1px solid var(--line); padding-top:14px; }
+  .exitlink { color:var(--muted); font-size:12px; text-decoration:none; cursor:pointer; }
+  .exitlink:hover { color:var(--text); }
+  .exitbox { display:none; margin-top:12px; }
+  .exitbox input { width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--line);
+                   background:#0b1220; color:var(--text); font-size:14px; user-select:text; -webkit-user-select:text; }
+  .exitgo { margin-top:8px; width:100%; padding:9px; border:0; border-radius:8px; background:#334155;
+            color:#fff; font-weight:600; cursor:pointer; }
+  .exiterr { color:#fecaca; font-size:12px; margin-top:8px; min-height:14px; }
 </style>
 </head>
 <body>
@@ -38,6 +47,15 @@
     <div class="error" id="error"></div>
     <button id="btn" type="submit">Log in &amp; open Dialer</button>
     <div class="foot" id="foot"></div>
+
+    <div class="exitwrap">
+      <a href="#" id="exitLink" class="exitlink">Close kiosk</a>
+      <div id="exitBox" class="exitbox">
+        <input id="exitCode" type="password" placeholder="Enter exit code" autocomplete="off">
+        <button type="button" id="exitBtn" class="exitgo">Close</button>
+        <div class="exiterr" id="exitErr"></div>
+      </div>
+    </div>
   </form>
 
 <script>
@@ -55,7 +73,25 @@
   window.addEventListener('focus', focusUser);
   focusUser();
 
-  // Secret exit code: type it anywhere on this screen to release & close the kiosk.
+  // Visible "Close kiosk" option: reveal a code box; correct code closes the app.
+  const exitLink = document.getElementById('exitLink');
+  const exitBox = document.getElementById('exitBox');
+  const exitCode = document.getElementById('exitCode');
+  const exitBtn = document.getElementById('exitBtn');
+  const exitErr = document.getElementById('exitErr');
+  exitLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    exitBox.style.display = 'block';
+    exitCode.focus();
+  });
+  function tryExit() {
+    if (exitCode.value === 'closeelite99') { window.kiosk.exit(); }
+    else { exitErr.textContent = 'Incorrect code.'; exitCode.value = ''; exitCode.focus(); }
+  }
+  exitBtn.addEventListener('click', tryExit);
+  exitCode.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); tryExit(); } });
+
+  // (Also still works as an invisible shortcut: type the code anywhere.)
   let codeBuf = '';
   window.addEventListener('keydown', (e) => {
     if (e.key && e.key.length === 1) codeBuf = (codeBuf + e.key).slice(-32);
