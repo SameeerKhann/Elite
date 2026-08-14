@@ -243,9 +243,12 @@ app.post('/admin/settings', requireAdmin, async (req, res) => {
   await store.setSetting('tabs', JSON.stringify(tabs));
   await store.setSetting('dialer_url', tabs[0] ? tabs[0].url : '');
   await store.setSetting('allowed_domains', domains);
-  if (req.body.agent_download_url !== undefined) {
-    await store.setSetting('agent_download_url', String(req.body.agent_download_url || '').trim());
-  }
+  res.redirect('/admin');
+});
+
+// Save just the agent-installer download link (its own form, never touches tabs).
+app.post('/admin/agent-download', requireAdmin, async (req, res) => {
+  await store.setSetting('agent_download_url', String(req.body.agent_download_url || '').trim());
   res.redirect('/admin');
 });
 

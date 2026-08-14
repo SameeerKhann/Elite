@@ -105,12 +105,13 @@ function renderPage(page, admin, data) {
         <h3 style="margin-top:0">📥 Agent app (install on each PC)</h3>
         <p class="muted">Download the Elite kiosk installer and run it on every agent computer. Once installed it auto-starts, locks the screen to your dialer, and can only be closed with the exit code.</p>
         ${data.agentDownloadUrl
-          ? `<a class="btn" href="${esc(data.agentDownloadUrl)}" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none">⬇ Download Agent App (.exe)</a>`
+          ? `<a class="btn" href="${esc(data.agentDownloadUrl)}" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none">⬇ Download Agent App</a>`
           : `<p class="muted"><i>No installer link set yet — paste the download URL below and Save.</i></p>`}
-        <div style="margin-top:12px">
+        <form method="post" action="/admin/agent-download" style="margin-top:12px">
           <label>Installer download URL</label>
-          <input form="kioskSettings" type="text" name="agent_download_url" value="${esc(data.agentDownloadUrl || '')}" placeholder="https://…/Elite-Agent-Setup.exe">
-        </div>
+          <input type="text" name="agent_download_url" value="${esc(data.agentDownloadUrl || '')}" placeholder="https://…/Elite-Agent.zip">
+          <div style="margin-top:10px"><button class="btn ghost">Save download link</button></div>
+        </form>
       </div>
 
       <div class="card">
