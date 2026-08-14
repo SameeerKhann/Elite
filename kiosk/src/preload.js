@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('kiosk', {
   logout: () => ipcRenderer.invoke('kiosk:logout'),
   info: () => ipcRenderer.invoke('kiosk:info'),
   exit: () => ipcRenderer.invoke('kiosk:exit'),
+  onTabUnread: (cb) => ipcRenderer.on('tab-unread', (_e, n) => cb(n)),
   // Workspace (tabs + sticky notes)
   workspace: () => ipcRenderer.invoke('kiosk:workspace'),
   switchTab: (index) => ipcRenderer.invoke('kiosk:switchTab', index),

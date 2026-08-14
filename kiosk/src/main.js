@@ -324,11 +324,22 @@ ipcMain.handle('chat:me', () => ({
   name: currentEmployee ? (currentEmployee.fullName || currentEmployee.username) : '',
 }));
 
-ipcMain.handle('chat:contacts', async () => {
+ipcMain.handle('chat:overview', async () => {
   try {
-    const { json } = await apiRequest('POST', '/api/kiosk/chat/contacts', { token: currentToken });
-    return json && json.ok ? json : { ok: false, contacts: [] };
-  } catch (err) { log('chat contacts error', err.message); return { ok: false, contacts: [] }; }
+    const { json } = await apiRequest('POST', '/api/kiosk/chat/overview', { token: currentToken });
+    return json && json.ok ? json : { ok: false, group: { unread: 0 }, rooms: [], contacts: [] };
+  } catch (err) { log('chat overview error', err.message); return { ok: false, group: { unread: 0 }, rooms: [], contacts: [] }; }
+});
+
+ipcMain.handle('chat:read', async (_e, to) => {
+  try { await apiRequest('POST', '/api/kiosk/chat/read', { token: currentToken, to }); return { ok: true }; }
+  catch { return { ok: false }; }
+});
+
+// Chat reports total unread; badge the "Elite Internal" tab in the shell.
+ipcMain.handle('chat:unread', (_e, n) => {
+  try { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('tab-unread', Number(n) || 0); } catch {}
+  return { ok: true };
 });
 
 ipcMain.handle('chat:send', async (_e, { to, text }) => {

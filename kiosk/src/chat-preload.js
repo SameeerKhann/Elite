@@ -4,7 +4,9 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('chat', {
   me: () => ipcRenderer.invoke('chat:me'),
-  contacts: () => ipcRenderer.invoke('chat:contacts'),
+  overview: () => ipcRenderer.invoke('chat:overview'),
   send: (to, text) => ipcRenderer.invoke('chat:send', { to, text }),
   list: (to, sinceId) => ipcRenderer.invoke('chat:list', { to, sinceId }),
+  markRead: (to) => ipcRenderer.invoke('chat:read', to),
+  setUnread: (n) => ipcRenderer.invoke('chat:unread', n), // badge the tab
 });

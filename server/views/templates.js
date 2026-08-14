@@ -34,6 +34,16 @@ const STYLE = `
   .help { margin-top:10px; font-size:13px; color:var(--muted); line-height:1.7;
           background:rgba(59,130,246,.07); border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
   code { background:#0b1220; border:1px solid var(--line); border-radius:5px; padding:1px 5px; font-size:12px; }
+  .btn.small.danger { background:var(--bad); }
+  .msgwrap { display:flex; gap:16px; align-items:flex-start; }
+  .convlist { width:280px; min-width:280px; background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  .conv-item { display:flex; justify-content:space-between; padding:11px 14px; border-bottom:1px solid var(--line);
+               color:var(--text); text-decoration:none; font-size:14px; }
+  .conv-item:hover { background:#243044; }
+  .conv-item.active { background:rgba(59,130,246,.15); border-left:3px solid var(--accent); }
+  .msgview { flex:1; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; min-height:200px; }
+  .amsg { padding:8px 0; border-bottom:1px solid var(--line); }
+  .amsg-h { font-size:12px; margin-bottom:3px; }
   label { display:block; font-size:13px; color:var(--muted); margin:10px 0 4px; }
   .btn { background:var(--accent); color:#fff; border:0; border-radius:8px; padding:9px 14px; cursor:pointer; font-weight:600; }
   .btn.small { padding:5px 10px; font-size:13px; }
@@ -61,6 +71,8 @@ function layout(title, admin, body) {
       <nav>
         ${nav('/admin', 'Dashboard', title === 'Dashboard')}
         ${nav('/admin/employees', 'Employees', title === 'Employees')}
+        ${nav('/admin/rooms', 'Rooms', title === 'Rooms')}
+        ${nav('/admin/messages', 'Messages', title === 'Messages')}
         <form action="/admin/logout" method="post" style="display:inline">
           <button class="btn ghost small">Log out (${esc(admin.username)})</button>
         </form>
@@ -179,6 +191,62 @@ function renderPage(page, admin, data) {
         <tbody>${rows}</tbody></table>
       </div>`;
     return layout('Employees', admin, body);
+  }
+
+  if (page === 'rooms') {
+    const empCheckbox = (roomId, e, checked) =>
+      `<label style="display:inline-flex;align-items:center;gap:6px;margin:3px 12px 3px 0;font-size:13px;color:var(--text)">
+         <input type="checkbox" name="member_ids" value="${e.id}" form="room${roomId}" ${checked ? 'checked' : ''}> ${esc(e.full_name || e.username)}
+       </label>`;
+    const roomCards = data.rooms.map(r => `
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <h3 style="margin:0">🛡 ${esc(r.name)}</h3>
+          <form method="post" action="/admin/rooms/${r.id}/delete" onsubmit="return confirm('Delete this room and its messages access?')">
+            <button class="btn small danger">Delete</button>
+          </form>
+        </div>
+        <p class="muted" style="margin:8px 0">Tick who is in this room, then Save.</p>
+        <form id="room${r.id}" method="post" action="/admin/rooms/${r.id}/members">
+          <div>${data.employees.map(e => empCheckbox(r.id, e, r.memberIds.includes(e.id))).join('')}</div>
+          <div style="margin-top:10px"><button class="btn small">Save members</button></div>
+        </form>
+      </div>`).join('') || `<div class="card muted">No rooms yet. Create one above.</div>`;
+    const body = `
+      ${data.flash ? `<div class="flash">${esc(data.flash)}</div>` : ''}
+      <div class="card">
+        <h3 style="margin-top:0">Create a team room</h3>
+        <p class="muted">Rooms are group channels for a subset of employees (e.g. a team or department). Everyone in the group "# General" is separate and always includes all staff.</p>
+        <form method="post" action="/admin/rooms/create" class="row">
+          <div><label>Room name</label><input type="text" name="name" placeholder="Sales Team" required></div>
+          <div style="flex:0"><button class="btn">Create room</button></div>
+        </form>
+      </div>
+      ${roomCards}`;
+    return layout('Rooms', admin, body);
+  }
+
+  if (page === 'messages') {
+    const convItems = data.convos.map(c =>
+      `<a href="/admin/messages?thread=${encodeURIComponent(c.thread)}"
+          class="conv-item ${c.thread === data.selected ? 'active' : ''}">
+         <span>${esc(c.label)}</span><span class="muted">${c.count}</span>
+       </a>`).join('') || `<div class="muted" style="padding:10px">No conversations yet.</div>`;
+    const msgs = data.messages.map(m => `
+      <div class="amsg">
+        <div class="amsg-h"><b>${esc(m.username)}</b> <span class="muted">${esc(String(m.created_at).replace('T',' ').replace('Z',' UTC'))}</span></div>
+        <div>${esc(m.body)}</div>
+      </div>`).join('') || `<div class="muted" style="padding:16px">No messages in this conversation.</div>`;
+    const body = `
+      <p class="muted">Read-only view of all internal conversations (group, team rooms, and direct messages).</p>
+      <div class="msgwrap">
+        <div class="convlist">${convItems}</div>
+        <div class="msgview">
+          <h3 style="margin:0 0 12px">${esc(data.selectedLabel || 'Select a conversation')}</h3>
+          ${msgs}
+        </div>
+      </div>`;
+    return layout('Messages', admin, body);
   }
 
   return layout('Elite', admin, '<div class="card">Unknown page.</div>');

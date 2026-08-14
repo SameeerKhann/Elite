@@ -160,25 +160,58 @@ app.get('/api/kiosk/config', async (req, res) => {
 // A conversation is either the shared 'group' channel (everyone) or a 1-to-1
 // DM. The DM thread key is derived from the two employee ids so both sides
 // always resolve to the same thread. `to` is 'group' or the other person's id.
-function resolveThread(selfId, to) {
+// `to` is 'group', 'room:<id>' (must be a member), or another employee's id.
+async function resolveThread(selfId, to) {
   if (to === 'group' || to == null || to === '') return { ok: true, thread: 'group' };
+  if (typeof to === 'string' && to.startsWith('room:')) {
+    const roomId = Number(to.slice(5));
+    if (!Number.isInteger(roomId) || roomId <= 0) return { ok: false };
+    if (!(await store.isRoomMember(roomId, selfId))) return { ok: false };
+    return { ok: true, thread: 'room:' + roomId };
+  }
   const other = Number(to);
   if (!Number.isInteger(other) || other <= 0 || other === selfId) return { ok: false };
   return { ok: true, thread: `dm:${Math.min(selfId, other)}-${Math.max(selfId, other)}` };
 }
 
-// Who can I message? The group plus every other active employee.
-app.post('/api/kiosk/chat/contacts', async (req, res) => {
+// Sidebar overview: my conversations with unread counts + presence.
+app.post('/api/kiosk/chat/overview', async (req, res) => {
   const { token } = req.body || {};
   try {
-    const payload = jwt.verify(token, JWT_SECRET);
-    const emps = await store.listEmployees();
-    const contacts = emps
-      .filter(e => e.active && e.id !== payload.sub)
-      .map(e => ({ id: e.id, username: e.username, fullName: e.full_name }));
-    res.json({ ok: true, self: { id: payload.sub, username: payload.username }, contacts });
+    const p = jwt.verify(token, JWT_SECRET);
+    const [emps, rooms, reads, online] = await Promise.all([
+      store.listEmployees(), store.listRoomsForEmployee(p.sub), store.getReadState(p.sub), store.listOnlineUsernames(),
+    ]);
+    const onlineSet = new Set(online);
+    const group = { unread: await store.unreadCount('group', p.sub, reads['group'] || 0) };
+    const roomsOut = [];
+    for (const r of rooms) {
+      const th = 'room:' + r.id;
+      roomsOut.push({ id: r.id, name: r.name, unread: await store.unreadCount(th, p.sub, reads[th] || 0) });
+    }
+    const contacts = [];
+    for (const e of emps) {
+      if (!e.active || e.id === p.sub) continue;
+      const th = `dm:${Math.min(p.sub, e.id)}-${Math.max(p.sub, e.id)}`;
+      contacts.push({ id: e.id, username: e.username, fullName: e.full_name, online: onlineSet.has(e.username), unread: await store.unreadCount(th, p.sub, reads[th] || 0) });
+    }
+    res.json({ ok: true, self: { id: p.sub, username: p.username }, group, rooms: roomsOut, contacts });
   } catch {
-    res.status(401).json({ ok: false, contacts: [] });
+    res.status(401).json({ ok: false });
+  }
+});
+
+// Mark a conversation read up to its latest message.
+app.post('/api/kiosk/chat/read', async (req, res) => {
+  const { token, to } = req.body || {};
+  try {
+    const p = jwt.verify(token, JWT_SECRET);
+    const r = await resolveThread(p.sub, to);
+    if (!r.ok) return res.status(400).json({ ok: false });
+    await store.setReadState(p.sub, r.thread, await store.maxMessageId(r.thread));
+    res.json({ ok: true });
+  } catch {
+    res.status(401).json({ ok: false });
   }
 });
 
@@ -189,7 +222,7 @@ app.post('/api/kiosk/chat/send', async (req, res) => {
   if (!body) return res.json({ ok: true });
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    const r = resolveThread(payload.sub, to);
+    const r = await resolveThread(payload.sub, to);
     if (!r.ok) return res.status(400).json({ ok: false, error: 'Invalid recipient.' });
     await store.addMessage(payload.sub, payload.username, body.slice(0, 2000), r.thread);
     store.purgeOldMessages().catch(() => {}); // 7-day retention, fire-and-forget
@@ -204,7 +237,7 @@ app.post('/api/kiosk/chat/list', async (req, res) => {
   const { token, to, sinceId } = req.body || {};
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    const r = resolveThread(payload.sub, to);
+    const r = await resolveThread(payload.sub, to);
     if (!r.ok) return res.status(400).json({ ok: false, messages: [] });
     const messages = await store.listMessages(r.thread, sinceId, 100);
     res.json({ ok: true, messages });
@@ -302,6 +335,47 @@ app.post('/admin/settings', requireAdmin, async (req, res) => {
 app.post('/admin/agent-download', requireAdmin, async (req, res) => {
   await store.setSetting('agent_download_url', String(req.body.agent_download_url || '').trim());
   res.redirect('/admin');
+});
+
+// --- Admin: chat rooms (team channels) -------------------------------------
+app.get('/admin/rooms', requireAdmin, async (req, res) => {
+  const [rooms, employees] = await Promise.all([store.listRooms(), store.listEmployees()]);
+  const roomData = [];
+  for (const r of rooms) roomData.push({ id: r.id, name: r.name, memberIds: await store.listRoomMemberIds(r.id) });
+  res.send(renderPage('rooms', req.admin, { rooms: roomData, employees: employees.filter(e => e.active), flash: req.query.msg || '' }));
+});
+app.post('/admin/rooms/create', requireAdmin, async (req, res) => {
+  const name = String(req.body.name || '').trim();
+  if (name) await store.createRoom(name);
+  res.redirect('/admin/rooms?msg=' + encodeURIComponent(name ? `Room "${name}" created.` : 'Room name required.'));
+});
+app.post('/admin/rooms/:id/members', requireAdmin, async (req, res) => {
+  let ids = req.body.member_ids || [];
+  if (!Array.isArray(ids)) ids = [ids];
+  await store.setRoomMembers(Number(req.params.id), ids.map(Number).filter(Boolean));
+  res.redirect('/admin/rooms?msg=' + encodeURIComponent('Members updated.'));
+});
+app.post('/admin/rooms/:id/delete', requireAdmin, async (req, res) => {
+  await store.deleteRoom(Number(req.params.id));
+  res.redirect('/admin/rooms?msg=' + encodeURIComponent('Room deleted.'));
+});
+
+// --- Admin: conversation viewer (read-only) --------------------------------
+app.get('/admin/messages', requireAdmin, async (req, res) => {
+  const [threads, employees, rooms] = await Promise.all([store.listThreadsWithMeta(), store.listEmployees(), store.listRooms()]);
+  const empById = {}; for (const e of employees) empById[e.id] = e.full_name || e.username;
+  const roomById = {}; for (const r of rooms) roomById[r.id] = r.name;
+  const label = (thread) => {
+    if (!thread) return '';
+    if (thread === 'group') return '# General';
+    if (thread.startsWith('room:')) return '🛡 ' + (roomById[thread.slice(5)] || ('Room ' + thread.slice(5)));
+    if (thread.startsWith('dm:')) { const [a, b] = thread.slice(3).split('-'); return (empById[a] || ('#' + a)) + ' ↔ ' + (empById[b] || ('#' + b)); }
+    return thread;
+  };
+  const convos = threads.map(t => ({ thread: t.thread, label: label(t.thread), count: t.count }));
+  const selected = req.query.thread || (convos[0] && convos[0].thread) || '';
+  const messages = selected ? await store.listMessagesByThread(selected, 500) : [];
+  res.send(renderPage('messages', req.admin, { convos, selected, selectedLabel: label(selected), messages }));
 });
 
 // ---------------------------------------------------------------------------

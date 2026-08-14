@@ -86,6 +86,13 @@ async function init() {
     await pgAll(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS notes TEXT NOT NULL DEFAULT ''`);
     await pgAll(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS thread TEXT NOT NULL DEFAULT 'group'`);
     await pgAll(`CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages (thread, id)`);
+    await pgAll(`CREATE TABLE IF NOT EXISTS rooms (
+      id SERIAL PRIMARY KEY, name TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+    await pgAll(`CREATE TABLE IF NOT EXISTS room_members (
+      room_id INTEGER NOT NULL, employee_id INTEGER NOT NULL, PRIMARY KEY (room_id, employee_id))`);
+    await pgAll(`CREATE TABLE IF NOT EXISTS read_state (
+      employee_id INTEGER NOT NULL, thread TEXT NOT NULL, last_read_id INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (employee_id, thread))`);
   } else {
     sqlite().exec(`
       CREATE TABLE IF NOT EXISTS admins (
@@ -105,6 +112,14 @@ async function init() {
         id INTEGER PRIMARY KEY AUTOINCREMENT, thread TEXT NOT NULL DEFAULT 'group',
         employee_id INTEGER NOT NULL, username TEXT NOT NULL, body TEXT NOT NULL,
         created_at TEXT NOT NULL DEFAULT (datetime('now')));
+      CREATE TABLE IF NOT EXISTS rooms (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')));
+      CREATE TABLE IF NOT EXISTS room_members (
+        room_id INTEGER NOT NULL, employee_id INTEGER NOT NULL, PRIMARY KEY (room_id, employee_id));
+      CREATE TABLE IF NOT EXISTS read_state (
+        employee_id INTEGER NOT NULL, thread TEXT NOT NULL, last_read_id INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (employee_id, thread));
     `);
     try { sqlite().exec("ALTER TABLE employees ADD COLUMN notes TEXT NOT NULL DEFAULT ''"); } catch {}
     try { sqlite().exec("ALTER TABLE messages ADD COLUMN thread TEXT NOT NULL DEFAULT 'group'"); } catch {}
@@ -267,6 +282,85 @@ async function purgeOldMessages() {
   else sqlRun("DELETE FROM messages WHERE created_at < datetime('now', '-7 days')");
 }
 
+// --- Rooms (admin-managed team channels) -----------------------------------
+async function createRoom(name) {
+  if (isPg) return (await pgOne('INSERT INTO rooms (name) VALUES ($1) RETURNING id', [name])).id;
+  return Number(sqlRun('INSERT INTO rooms (name) VALUES (?)', [name]).lastInsertRowid);
+}
+async function deleteRoom(id) {
+  if (isPg) { await pgAll('DELETE FROM room_members WHERE room_id = $1', [id]); await pgAll('DELETE FROM rooms WHERE id = $1', [id]); }
+  else { sqlRun('DELETE FROM room_members WHERE room_id = ?', [id]); sqlRun('DELETE FROM rooms WHERE id = ?', [id]); }
+}
+async function listRooms() {
+  const sql = 'SELECT id, name FROM rooms ORDER BY name';
+  return isPg ? await pgAll(sql) : sqlAll(sql);
+}
+async function addRoomMember(roomId, empId) {
+  if (isPg) await pgAll('INSERT INTO room_members (room_id, employee_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [roomId, empId]);
+  else sqlRun('INSERT OR IGNORE INTO room_members (room_id, employee_id) VALUES (?, ?)', [roomId, empId]);
+}
+async function setRoomMembers(roomId, empIds) {
+  if (isPg) await pgAll('DELETE FROM room_members WHERE room_id = $1', [roomId]);
+  else sqlRun('DELETE FROM room_members WHERE room_id = ?', [roomId]);
+  for (const id of empIds) await addRoomMember(roomId, Number(id));
+}
+async function listRoomMemberIds(roomId) {
+  const rows = isPg ? await pgAll('SELECT employee_id FROM room_members WHERE room_id = $1', [roomId])
+                    : sqlAll('SELECT employee_id FROM room_members WHERE room_id = ?', [roomId]);
+  return rows.map(r => r.employee_id);
+}
+async function listRoomsForEmployee(empId) {
+  const sql = isPg
+    ? 'SELECT r.id, r.name FROM rooms r JOIN room_members m ON m.room_id = r.id WHERE m.employee_id = $1 ORDER BY r.name'
+    : 'SELECT r.id, r.name FROM rooms r JOIN room_members m ON m.room_id = r.id WHERE m.employee_id = ? ORDER BY r.name';
+  return isPg ? await pgAll(sql, [empId]) : sqlAll(sql, [empId]);
+}
+async function isRoomMember(roomId, empId) {
+  const row = isPg ? await pgOne('SELECT 1 AS x FROM room_members WHERE room_id = $1 AND employee_id = $2', [roomId, empId])
+                   : sqlOne('SELECT 1 AS x FROM room_members WHERE room_id = ? AND employee_id = ?', [roomId, empId]);
+  return !!row;
+}
+
+// --- Unread / read-state / presence ----------------------------------------
+async function getReadState(empId) {
+  const rows = isPg ? await pgAll('SELECT thread, last_read_id FROM read_state WHERE employee_id = $1', [empId])
+                    : sqlAll('SELECT thread, last_read_id FROM read_state WHERE employee_id = ?', [empId]);
+  const map = {};
+  for (const r of rows) map[r.thread] = r.last_read_id;
+  return map;
+}
+async function setReadState(empId, thread, lastId) {
+  if (isPg) await pgAll(`INSERT INTO read_state (employee_id, thread, last_read_id) VALUES ($1, $2, $3)
+    ON CONFLICT (employee_id, thread) DO UPDATE SET last_read_id = GREATEST(read_state.last_read_id, EXCLUDED.last_read_id)`, [empId, thread, lastId]);
+  else sqlRun(`INSERT INTO read_state (employee_id, thread, last_read_id) VALUES (?, ?, ?)
+    ON CONFLICT (employee_id, thread) DO UPDATE SET last_read_id = MAX(read_state.last_read_id, excluded.last_read_id)`, [empId, thread, lastId]);
+}
+async function maxMessageId(thread) {
+  const row = isPg ? await pgOne('SELECT COALESCE(MAX(id),0)::int AS m FROM messages WHERE thread = $1', [thread])
+                   : sqlOne('SELECT COALESCE(MAX(id),0) AS m FROM messages WHERE thread = ?', [thread]);
+  return row ? row.m : 0;
+}
+async function unreadCount(thread, empId, lastReadId) {
+  if (isPg) return (await pgOne('SELECT COUNT(*)::int AS c FROM messages WHERE thread = $1 AND id > $2 AND employee_id <> $3', [thread, lastReadId, empId])).c;
+  return sqlOne('SELECT COUNT(*) AS c FROM messages WHERE thread = ? AND id > ? AND employee_id <> ?', [thread, lastReadId, empId]).c;
+}
+async function listOnlineUsernames() {
+  const rows = isPg ? await pgAll('SELECT DISTINCT username FROM shifts WHERE logout_at IS NULL')
+                    : sqlAll('SELECT DISTINCT username FROM shifts WHERE logout_at IS NULL');
+  return rows.map(r => r.username);
+}
+
+// --- Admin conversation viewer ---------------------------------------------
+async function listThreadsWithMeta() {
+  const sql = isPg
+    ? `SELECT thread, COUNT(*)::int AS count, MAX(id) AS last_id FROM messages GROUP BY thread ORDER BY MAX(id) DESC`
+    : `SELECT thread, COUNT(*) AS count, MAX(id) AS last_id FROM messages GROUP BY thread ORDER BY MAX(id) DESC`;
+  return isPg ? await pgAll(sql) : sqlAll(sql);
+}
+async function listMessagesByThread(thread, limit = 500) {
+  return listMessages(thread, 0, limit);
+}
+
 module.exports = {
   isPg, init,
   getSetting, setSetting,
@@ -276,4 +370,8 @@ module.exports = {
   createShift, closeShift,
   countEmployees, countOpenShifts, listOpenShifts, listShifts,
   addMessage, listMessages, purgeOldMessages,
+  createRoom, deleteRoom, listRooms, addRoomMember, setRoomMembers,
+  listRoomMemberIds, listRoomsForEmployee, isRoomMember,
+  getReadState, setReadState, maxMessageId, unreadCount, listOnlineUsernames,
+  listThreadsWithMeta, listMessagesByThread,
 };
