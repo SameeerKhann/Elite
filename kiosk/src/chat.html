@@ -46,12 +46,16 @@
   button.send { border:0; border-radius:10px; background:var(--accent); color:#fff; font-weight:600;
                 padding:0 18px; cursor:pointer; font-size:14px; }
   button.send:disabled { opacity:.6; cursor:default; }
+
+  .logo-light-img{display:none}
+  :root[data-theme="light"] .logo-dark-img{display:none}
+  :root[data-theme="light"] .logo-light-img{display:inline-block}
 </style>
 </head>
 <body>
   <div class="side">
     <div class="brand" style="display:flex;align-items:center;gap:9px">
-      <span style="display:inline-flex;width:24px;height:24px;border-radius:7px;background:linear-gradient(135deg,#5b68eb,#28e1fd);align-items:center;justify-content:center;flex:none"><svg viewBox="0 0 100 100" width="72%" height="72%" fill="none" aria-hidden="true"><circle cx="45" cy="22" r="9" fill="#fff"/><g stroke="#fff" stroke-width="9" stroke-linecap="round"><path d="M50 50C41 39 33 33 24 29"/><path d="M50 50C63 38 75 32 86 29"/><path d="M50 53C45 66 41 78 37 90"/><path d="M50 53C57 65 63 77 69 88"/></g><g stroke="#fff" stroke-width="4.5" stroke-linecap="round" opacity=".6"><path d="M72 47C80 49 85 54 88 61"/><path d="M77 58C83 60 86 64 88 70"/></g></svg></span>
+      <img class="logo-dark-img" src="elite-dark.webp" alt="Elite" style="height:22px;width:auto;border-radius:6px;vertical-align:middle"><img class="logo-light-img" src="elite-light.jpg" alt="Elite" style="height:22px;width:auto;border-radius:6px;vertical-align:middle">
       <span>Elite Internal</span>
     </div>
     <div class="sec">Channel</div>

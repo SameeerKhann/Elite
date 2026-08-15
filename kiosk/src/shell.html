@@ -48,11 +48,15 @@
   .notes textarea:focus { outline:2px solid var(--accent); border-color:var(--accent); }
   .status { padding:0 14px 12px; font-size:12px; color:var(--muted); height:16px; }
   .status.saved { color:var(--good); }
+
+  .logo-light-img{display:none}
+  :root[data-theme="light"] .logo-dark-img{display:none}
+  :root[data-theme="light"] .logo-light-img{display:inline-block}
 </style>
 </head>
 <body>
   <div class="bar">
-    <span class="logo"><span class="mark"><svg viewBox="0 0 100 100" width="72%" height="72%" fill="none" aria-hidden="true"><circle cx="45" cy="22" r="9" fill="#fff"/><g stroke="#fff" stroke-width="9" stroke-linecap="round"><path d="M50 50C41 39 33 33 24 29"/><path d="M50 50C63 38 75 32 86 29"/><path d="M50 53C45 66 41 78 37 90"/><path d="M50 53C57 65 63 77 69 88"/></g><g stroke="#fff" stroke-width="4.5" stroke-linecap="round" opacity=".6"><path d="M72 47C80 49 85 54 88 61"/><path d="M77 58C83 60 86 64 88 70"/></g></svg></span><span class="grad">Elite</span></span>
+    <span class="logo"><img class="logo-dark-img" src="elite-dark.webp" alt="Elite" style="height:24px;width:auto;border-radius:6px;vertical-align:middle"><img class="logo-light-img" src="elite-light.jpg" alt="Elite" style="height:24px;width:auto;border-radius:6px;vertical-align:middle"><span class="grad">Elite</span></span>
     <div class="tabs" id="tabs"></div>
     <div class="spacer"></div>
     <span class="who">On shift: <b id="who">—</b></span>

@@ -57,6 +57,9 @@ const STYLE = `
   .logo .grad { background:var(--brand-grad); -webkit-background-clip:text; background-clip:text; color:transparent; }
   .themebtn { background:transparent; border:1px solid var(--line); color:var(--text); border-radius:8px;
               padding:6px 10px; cursor:pointer; font-size:13px; margin-right:16px; }
+  .logo-light-img { display:none; }
+  :root[data-theme="light"] .logo-dark-img { display:none; }
+  :root[data-theme="light"] .logo-light-img { display:inline-block; }
   .btn.small { padding:5px 10px; font-size:13px; }
   .btn.ghost { background:transparent; border:1px solid var(--line); color:var(--text); }
   .btn.danger { background:var(--bad); }
@@ -72,8 +75,9 @@ const STYLE = `
 `;
 
 // Reusable inline wordmark logo + theme bootstrap (shared by all admin pages).
-const MARK = `<svg viewBox="0 0 100 100" width="72%" height="72%" fill="none" aria-hidden="true"><circle cx="45" cy="22" r="9" fill="#fff"/><g stroke="#fff" stroke-width="9" stroke-linecap="round"><path d="M50 50C41 39 33 33 24 29"/><path d="M50 50C63 38 75 32 86 29"/><path d="M50 53C45 66 41 78 37 90"/><path d="M50 53C57 65 63 77 69 88"/></g><g stroke="#fff" stroke-width="4.5" stroke-linecap="round" opacity=".6"><path d="M72 47C80 49 85 54 88 61"/><path d="M77 58C83 60 86 64 88 70"/></g></svg>`;
-const LOGO = `<span class="logo"><span class="mark">${MARK}</span><span>Elite <span class="grad">Techlogix</span></span></span>`;
+const { dark: LOGO_DARK, light: LOGO_LIGHT } = require('./logo');
+const LOGO_IMG_STYLE = 'height:30px;width:auto;border-radius:6px;vertical-align:middle';
+const LOGO = `<span class="logo"><img class="logo-dark-img" src="${LOGO_DARK}" alt="Elite" style="${LOGO_IMG_STYLE}"><img class="logo-light-img" src="${LOGO_LIGHT}" alt="Elite" style="${LOGO_IMG_STYLE}"><span>Elite <span class="grad">Techlogix</span></span></span>`;
 const THEME_HEAD = `<script>(function(){try{var t=localStorage.getItem('elite-theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 function toggleTheme(){var c=document.documentElement.getAttribute('data-theme')==='light'?'dark':'light';document.documentElement.setAttribute('data-theme',c);try{localStorage.setItem('elite-theme',c);}catch(e){}var b=document.getElementById('themebtn');if(b)b.textContent=c==='light'?'\\u{1F319} Dark':'\\u2600 Light';}</script>`;
 const THEME_INIT = `<script>(function(){var b=document.getElementById('themebtn');if(b)b.textContent=(document.documentElement.getAttribute('data-theme')==='light')?'\\u{1F319} Dark':'\\u2600 Light';})();</script>`;
