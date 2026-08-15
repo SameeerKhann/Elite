@@ -72,7 +72,8 @@ const STYLE = `
 `;
 
 // Reusable inline wordmark logo + theme bootstrap (shared by all admin pages).
-const LOGO = `<span class="logo"><span class="mark">E</span><span>Elite <span class="grad">Techlogix</span></span></span>`;
+const MARK = `<svg viewBox="0 0 100 100" width="72%" height="72%" fill="none" aria-hidden="true"><circle cx="45" cy="22" r="9" fill="#fff"/><g stroke="#fff" stroke-width="9" stroke-linecap="round"><path d="M50 50C41 39 33 33 24 29"/><path d="M50 50C63 38 75 32 86 29"/><path d="M50 53C45 66 41 78 37 90"/><path d="M50 53C57 65 63 77 69 88"/></g><g stroke="#fff" stroke-width="4.5" stroke-linecap="round" opacity=".6"><path d="M72 47C80 49 85 54 88 61"/><path d="M77 58C83 60 86 64 88 70"/></g></svg>`;
+const LOGO = `<span class="logo"><span class="mark">${MARK}</span><span>Elite <span class="grad">Techlogix</span></span></span>`;
 const THEME_HEAD = `<script>(function(){try{var t=localStorage.getItem('elite-theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 function toggleTheme(){var c=document.documentElement.getAttribute('data-theme')==='light'?'dark':'light';document.documentElement.setAttribute('data-theme',c);try{localStorage.setItem('elite-theme',c);}catch(e){}var b=document.getElementById('themebtn');if(b)b.textContent=c==='light'?'\\u{1F319} Dark':'\\u2600 Light';}</script>`;
 const THEME_INIT = `<script>(function(){var b=document.getElementById('themebtn');if(b)b.textContent=(document.documentElement.getAttribute('data-theme')==='light')?'\\u{1F319} Dark':'\\u2600 Light';})();</script>`;
