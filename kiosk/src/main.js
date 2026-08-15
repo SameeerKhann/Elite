@@ -252,6 +252,16 @@ function switchTab(index) {
   activeTab = index;
   layout();
   try { mainWindow.setTopBrowserView(tabViews[index]); } catch {}
+  notifyChatActive();
+}
+
+// Tell the chat page whether it's the visible tab so it can poll fast only when
+// actually being viewed (otherwise it just does a light unread check).
+function notifyChatActive() {
+  const chatIdx = currentTabs.findIndex(t => t && t.chat);
+  if (chatIdx >= 0 && tabViews[chatIdx] && !tabViews[chatIdx].webContents.isDestroyed()) {
+    try { tabViews[chatIdx].webContents.send('chat-active', activeTab === chatIdx); } catch {}
+  }
 }
 
 // Position the active tab's view in the area left of the notes panel; park the

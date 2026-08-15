@@ -187,12 +187,26 @@
   window.chat.getTheme().then(applyTheme);
   window.chat.onTheme(applyTheme);
 
+  // Adaptive polling to stay light at scale:
+  //  • When this chat tab is the one being viewed  -> poll messages every 6s.
+  //  • When the agent is on another tab (the usual case) -> no message polling,
+  //    just a light unread check every ~20s to keep the tab badge current.
+  let active = false;
+  window.chat.onActive((a) => {
+    active = a;
+    if (a) { poll(); refreshOverview(); window.chat.markRead(currentTo); }
+  });
+
+  setInterval(() => { if (active) poll(); }, 6000); // messages only while viewing
+
+  (function overviewLoop() {
+    setTimeout(async () => { await refreshOverview(); overviewLoop(); }, active ? 9000 : 20000);
+  })();
+
   (async () => {
     me = await window.chat.me();
-    await refreshOverview();
+    await refreshOverview();          // initial badge
     selectConversation('group', '# General');
-    setInterval(poll, 3000);
-    setInterval(refreshOverview, 4000);
   })();
 </script>
 </body>

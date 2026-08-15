@@ -174,28 +174,33 @@ async function resolveThread(selfId, to) {
   return { ok: true, thread: `dm:${Math.min(selfId, other)}-${Math.max(selfId, other)}` };
 }
 
+const dmKey = (a, b) => `dm:${Math.min(a, b)}-${Math.max(a, b)}`;
+
 // Sidebar overview: my conversations with unread counts + presence.
+// All unread counts come from ONE query, so this stays cheap even with 50 PCs.
 app.post('/api/kiosk/chat/overview', async (req, res) => {
   const { token } = req.body || {};
   try {
     const p = jwt.verify(token, JWT_SECRET);
-    const [emps, rooms, reads, online] = await Promise.all([
-      store.listEmployees(), store.listRoomsForEmployee(p.sub), store.getReadState(p.sub), store.listOnlineUsernames(),
+    const [emps, rooms, online] = await Promise.all([
+      store.listEmployees(), store.listRoomsForEmployee(p.sub), store.listOnlineUsernames(),
     ]);
     const onlineSet = new Set(online);
-    const group = { unread: await store.unreadCount('group', p.sub, reads['group'] || 0) };
-    const roomsOut = [];
-    for (const r of rooms) {
-      const th = 'room:' + r.id;
-      roomsOut.push({ id: r.id, name: r.name, unread: await store.unreadCount(th, p.sub, reads[th] || 0) });
-    }
-    const contacts = [];
-    for (const e of emps) {
-      if (!e.active || e.id === p.sub) continue;
-      const th = `dm:${Math.min(p.sub, e.id)}-${Math.max(p.sub, e.id)}`;
-      contacts.push({ id: e.id, username: e.username, fullName: e.full_name, online: onlineSet.has(e.username), unread: await store.unreadCount(th, p.sub, reads[th] || 0) });
-    }
-    res.json({ ok: true, self: { id: p.sub, username: p.username }, group, rooms: roomsOut, contacts });
+    const contacts = emps.filter(e => e.active && e.id !== p.sub);
+    const roomThreads = rooms.map(r => 'room:' + r.id);
+    const dmThreads = contacts.map(c => dmKey(p.sub, c.id));
+    const unread = await store.unreadByThreads(p.sub, ['group', ...roomThreads, ...dmThreads]);
+
+    res.json({
+      ok: true,
+      self: { id: p.sub, username: p.username },
+      group: { unread: unread['group'] || 0 },
+      rooms: rooms.map(r => ({ id: r.id, name: r.name, unread: unread['room:' + r.id] || 0 })),
+      contacts: contacts.map(c => ({
+        id: c.id, username: c.username, fullName: c.full_name,
+        online: onlineSet.has(c.username), unread: unread[dmKey(p.sub, c.id)] || 0,
+      })),
+    });
   } catch {
     res.status(401).json({ ok: false });
   }

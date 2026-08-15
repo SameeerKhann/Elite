@@ -344,6 +344,31 @@ async function unreadCount(thread, empId, lastReadId) {
   if (isPg) return (await pgOne('SELECT COUNT(*)::int AS c FROM messages WHERE thread = $1 AND id > $2 AND employee_id <> $3', [thread, lastReadId, empId])).c;
   return sqlOne('SELECT COUNT(*) AS c FROM messages WHERE thread = ? AND id > ? AND employee_id <> ?', [thread, lastReadId, empId]).c;
 }
+// Unread counts for MANY threads in ONE query (replaces N per-thread queries).
+// Returns { thread: count } only for threads that have unread messages.
+async function unreadByThreads(empId, threads) {
+  if (!threads || !threads.length) return {};
+  let rows;
+  if (isPg) {
+    rows = await pgAll(
+      `SELECT m.thread AS thread, COUNT(*)::int AS unread
+       FROM messages m
+       LEFT JOIN read_state r ON r.employee_id = $1 AND r.thread = m.thread
+       WHERE m.employee_id <> $1 AND m.id > COALESCE(r.last_read_id, 0) AND m.thread = ANY($2::text[])
+       GROUP BY m.thread`, [empId, threads]);
+  } else {
+    const ph = threads.map(() => '?').join(',');
+    rows = sqlAll(
+      `SELECT m.thread AS thread, COUNT(*) AS unread
+       FROM messages m
+       LEFT JOIN read_state r ON r.employee_id = ? AND r.thread = m.thread
+       WHERE m.employee_id <> ? AND m.id > COALESCE(r.last_read_id, 0) AND m.thread IN (${ph})
+       GROUP BY m.thread`, [empId, empId, ...threads]);
+  }
+  const map = {};
+  for (const r of rows) map[r.thread] = r.unread;
+  return map;
+}
 async function listOnlineUsernames() {
   const rows = isPg ? await pgAll('SELECT DISTINCT username FROM shifts WHERE logout_at IS NULL')
                     : sqlAll('SELECT DISTINCT username FROM shifts WHERE logout_at IS NULL');
@@ -372,6 +397,6 @@ module.exports = {
   addMessage, listMessages, purgeOldMessages,
   createRoom, deleteRoom, listRooms, addRoomMember, setRoomMembers,
   listRoomMemberIds, listRoomsForEmployee, isRoomMember,
-  getReadState, setReadState, maxMessageId, unreadCount, listOnlineUsernames,
+  getReadState, setReadState, maxMessageId, unreadCount, unreadByThreads, listOnlineUsernames,
   listThreadsWithMeta, listMessagesByThread,
 };
