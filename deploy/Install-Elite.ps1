@@ -28,8 +28,10 @@
 #>
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory)] [string]$KioskPassword,
-  [string]$KioskUser = 'eliteagent',
+  # Both are OPTIONAL. If omitted, a UNIQUE username + password is generated for
+  # THIS PC automatically, so no two computers ever share the same account.
+  [string]$KioskPassword,
+  [string]$KioskUser,
   [string]$DownloadUrl = 'https://github.com/SameeerKhann/elite-agent/releases/download/v0.1.0/Elite-Agent.zip',
   [string]$InstallDir = 'C:\Elite-Agent'
 )
@@ -43,6 +45,17 @@ function Assert-Admin {
 }
 Assert-Admin
 Write-Host "== Elite Agent — kiosk install ==" -ForegroundColor Cyan
+
+# Generate a unique kiosk account for THIS PC when not supplied.
+if ([string]::IsNullOrWhiteSpace($KioskUser)) {
+  $suffix = -join ((48..57) + (97..122) | Get-Random -Count 6 | ForEach-Object { [char]$_ })
+  $KioskUser = "elite_$suffix"
+}
+if ([string]::IsNullOrWhiteSpace($KioskPassword)) {
+  $pool = [char[]](65..90) + [char[]](97..122) + [char[]](48..57) + '!@#%^*-_'.ToCharArray()
+  $KioskPassword = -join (1..20 | ForEach-Object { $pool | Get-Random })
+}
+Write-Host "This PC's kiosk account: $KioskUser  (unique to this machine)" -ForegroundColor Cyan
 
 # --- 1) Download + install the app ------------------------------------------
 $zip = Join-Path $env:TEMP 'Elite-Agent.zip'
@@ -110,7 +123,18 @@ Set-Reg $wl "DefaultUserName" $KioskUser 'String'
 Set-Reg $wl "DefaultPassword" $KioskPassword 'String'
 Set-Reg $wl "DefaultDomainName" $env:COMPUTERNAME 'String'
 
+# Save this PC's kiosk account details to a local file for your records.
+$record = "PC: $env:COMPUTERNAME`r`nKiosk account: $KioskUser`r`nKiosk password: $KioskPassword`r`nInstalled: $(Get-Date)"
+try { $record | Out-File -FilePath (Join-Path $InstallDir 'kiosk-account.txt') -Encoding utf8 } catch {}
+
 Write-Host ""
 Write-Host "DONE. Reboot to start the locked kiosk." -ForegroundColor Green
+Write-Host "-------------------------------------------------------------" -ForegroundColor DarkGray
+Write-Host "This PC's UNIQUE kiosk account (for your records):" -ForegroundColor Cyan
+Write-Host "   Username: $KioskUser"
+Write-Host "   Password: $KioskPassword"
+Write-Host "   (also saved to $InstallDir\kiosk-account.txt)"
+Write-Host "-------------------------------------------------------------" -ForegroundColor DarkGray
+Write-Host "Agents log in with their OWN username/password that you create in the admin portal." -ForegroundColor Cyan
 Write-Host "Manage this PC later: at sign-in, Ctrl+Alt+Del -> Switch user -> your admin account." -ForegroundColor Yellow
 Write-Host "Undo everything: run Remove-Kiosk.ps1 -KioskUser $KioskUser" -ForegroundColor Yellow
