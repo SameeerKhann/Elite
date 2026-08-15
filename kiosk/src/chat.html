@@ -5,8 +5,11 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
 <title>Elite Internal</title>
 <style>
-  :root { --bg:#0b1220; --panel:#111c33; --side:#0e1830; --line:#334155; --text:#e2e8f0; --muted:#94a3b8;
-          --accent:#3b82f6; --mine:#1d4ed8; --bubble:#1e293b; --active:#1e293b; --bad:#ef4444; --good:#22c55e; }
+  :root { --bg:#0b1120; --panel:#131c30; --side:#0e1626; --line:#263349; --text:#e6ebf5; --muted:#93a1b8;
+          --input:#0b1322; --accent:#5b68eb; --accent2:#28e1fd; --mine:#3f4fd6; --bubble:#1a2740;
+          --active:#1a2740; --bad:#ef4444; --good:#22c55e; }
+  :root[data-theme="light"] { --bg:#ffffff; --panel:#ffffff; --side:#f3f6fc; --line:#e3e8f0; --text:#141b2b;
+          --muted:#5c6879; --input:#ffffff; --accent:#4f5fe0; --accent2:#0bb6dc; --mine:#4f5fe0; --bubble:#eef2f9; --active:#e7edf9; }
   * { box-sizing:border-box; }
   html,body { margin:0; height:100%; background:var(--bg); color:var(--text);
               font-family:system-ui,Segoe UI,Roboto,sans-serif; }
@@ -32,13 +35,13 @@
   .msg .who { font-size:11px; color:var(--muted); margin-bottom:3px; }
   .msg .body { font-size:14px; line-height:1.45; white-space:pre-wrap; word-wrap:break-word; }
   .msg .time { font-size:10px; color:var(--muted); margin-top:4px; text-align:right; }
-  .msg.mine { align-self:flex-end; background:var(--mine); }
-  .msg.mine .who { color:#dbeafe; }
+  .msg.mine { align-self:flex-end; background:var(--mine); color:#fff; }
+  .msg.mine .who, .msg.mine .time { color:#dbeafe; }
   .empty { color:var(--muted); text-align:center; margin:auto; font-size:13px; }
   .note { padding:6px 18px; font-size:11px; color:var(--muted); background:var(--panel); }
   form { display:flex; gap:8px; padding:12px 18px; border-top:1px solid var(--line); background:var(--panel); }
   #text { flex:1; resize:none; padding:11px 13px; border-radius:10px; border:1px solid var(--line);
-          background:#0b1220; color:var(--text); font:inherit; font-size:14px; max-height:120px; }
+          background:var(--input); color:var(--text); font:inherit; font-size:14px; max-height:120px; }
   #text:focus { outline:2px solid var(--accent); border-color:var(--accent); }
   button.send { border:0; border-radius:10px; background:var(--accent); color:#fff; font-weight:600;
                 padding:0 18px; cursor:pointer; font-size:14px; }
@@ -171,6 +174,11 @@
 
   form.addEventListener('submit', (e) => { e.preventDefault(); sendNow(); });
   textEl.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendNow(); } });
+
+  // Theme — applied from the main process and kept in sync live.
+  const applyTheme = (t) => document.documentElement.setAttribute('data-theme', t === 'light' ? 'light' : 'dark');
+  window.chat.getTheme().then(applyTheme);
+  window.chat.onTheme(applyTheme);
 
   (async () => {
     me = await window.chat.me();

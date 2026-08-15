@@ -37,6 +37,7 @@ let currentEmployee = null; // {username, fullName}
 let currentNotes = '';    // this agent's sticky notes (loaded at login)
 let notesOpen = true;     // notes side panel visible?
 let allowExit = false;    // set true only after the secret exit code is entered
+let currentTheme = 'dark'; // 'dark' | 'light' — persisted, synced to all views
 const NOTES_WIDTH = 340;
 
 // --- Diagnostic logging (writes to kiosk/kiosk.log) -------------------------
@@ -354,6 +355,21 @@ ipcMain.handle('chat:list', async (_e, { to, sinceId }) => {
   } catch (err) { log('chat list error', err.message); return { ok: false, messages: [] }; }
 });
 
+// --- Theme (dark/light), persisted and broadcast to every view -------------
+function themeFile() { return path.join(app.getPath('userData'), 'theme.txt'); }
+function loadTheme() { try { const t = fs.readFileSync(themeFile(), 'utf8').trim(); if (t === 'light' || t === 'dark') currentTheme = t; } catch {} }
+function broadcastTheme() {
+  try { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('theme', currentTheme); } catch {}
+  for (const v of tabViews) { try { v.webContents.send('theme', currentTheme); } catch {} }
+}
+ipcMain.handle('kiosk:getTheme', () => currentTheme);
+ipcMain.handle('kiosk:setTheme', (_e, t) => {
+  currentTheme = (t === 'light') ? 'light' : 'dark';
+  try { fs.writeFileSync(themeFile(), currentTheme); } catch {}
+  broadcastTheme();
+  return { ok: true };
+});
+
 // Secret exit code entered on the login screen: releases the machine and quits.
 ipcMain.handle('kiosk:exit', async () => {
   log('exit code accepted — releasing kiosk and quitting');
@@ -397,7 +413,8 @@ ipcMain.handle('kiosk:saveNotes', async (_e, notes) => {
 
 // ---------------------------------------------------------------------------
 app.whenReady().then(() => {
-  log('=== app started ===', 'config:', JSON.stringify(CONFIG));
+  loadTheme();
+  log('=== app started ===', 'config:', JSON.stringify(CONFIG), 'theme:', currentTheme);
   // Extra safety: strip permissions the dialer view might request.
   session.fromPartition('persist:dialer').setPermissionRequestHandler((_wc, permission, cb) => {
     const allow = ['media', 'notifications', 'clipboard-read', 'clipboard-sanitized-write'];

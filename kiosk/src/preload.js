@@ -7,6 +7,9 @@ contextBridge.exposeInMainWorld('kiosk', {
   info: () => ipcRenderer.invoke('kiosk:info'),
   exit: () => ipcRenderer.invoke('kiosk:exit'),
   onTabUnread: (cb) => ipcRenderer.on('tab-unread', (_e, n) => cb(n)),
+  getTheme: () => ipcRenderer.invoke('kiosk:getTheme'),
+  setTheme: (t) => ipcRenderer.invoke('kiosk:setTheme', t),
+  onTheme: (cb) => ipcRenderer.on('theme', (_e, t) => cb(t)),
   // Workspace (tabs + sticky notes)
   workspace: () => ipcRenderer.invoke('kiosk:workspace'),
   switchTab: (index) => ipcRenderer.invoke('kiosk:switchTab', index),

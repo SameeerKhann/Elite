@@ -5,39 +5,49 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
 <title>Shift Login</title>
 <style>
-  :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#e2e8f0; --muted:#94a3b8; --accent:#3b82f6; --bad:#ef4444; }
+  :root { --bg:#0b1120; --card:#131c30; --line:#263349; --text:#e6ebf5; --muted:#93a1b8; --input:#0b1322;
+          --accent:#5b68eb; --accent2:#28e1fd; --bad:#ef4444; --glow:#16233f; --shadow:rgba(0,0,0,.4);
+          --brand-grad:linear-gradient(135deg,#5b68eb,#28e1fd); }
+  :root[data-theme="light"] { --bg:#eef1f8; --card:#ffffff; --line:#e3e8f0; --text:#141b2b; --muted:#5c6879;
+          --input:#ffffff; --accent:#4f5fe0; --accent2:#0bb6dc; --glow:#dfe6fb; --shadow:rgba(20,30,60,.12); }
   * { box-sizing:border-box; -webkit-user-select:none; user-select:none; }
   html,body { height:100%; margin:0; }
-  body { font-family:system-ui,Segoe UI,Roboto,sans-serif; background:radial-gradient(circle at 50% 30%, #16233f, var(--bg));
+  body { font-family:system-ui,Segoe UI,Roboto,sans-serif; background:radial-gradient(circle at 50% 30%, var(--glow), var(--bg));
          color:var(--text); display:flex; align-items:center; justify-content:center; }
-  .card { width:380px; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:32px; box-shadow:0 20px 60px rgba(0,0,0,.4); }
-  h1 { font-size:22px; margin:0 0 4px; }
-  .sub { color:var(--muted); font-size:13px; margin-bottom:24px; }
+  .card { width:380px; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:32px; box-shadow:0 20px 60px var(--shadow); }
+  .logo { display:flex; align-items:center; justify-content:center; gap:10px; font-weight:700; font-size:20px; margin-bottom:18px; }
+  .logo .mark { width:34px; height:34px; border-radius:9px; background:var(--brand-grad); display:flex;
+                align-items:center; justify-content:center; color:#fff; font-weight:800; font-size:19px; }
+  .logo .grad { background:var(--brand-grad); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  h1 { font-size:21px; margin:0 0 4px; text-align:center; }
+  .sub { color:var(--muted); font-size:13px; margin-bottom:22px; text-align:center; }
   label { display:block; font-size:13px; color:var(--muted); margin:14px 0 6px; }
   input { width:100%; padding:12px 14px; border-radius:10px; border:1px solid var(--line);
-          background:#0b1220; color:var(--text); font-size:15px; user-select:text; -webkit-user-select:text; }
+          background:var(--input); color:var(--text); font-size:15px; user-select:text; -webkit-user-select:text; }
   input:focus { outline:2px solid var(--accent); border-color:var(--accent); }
-  button { width:100%; margin-top:22px; padding:13px; border:0; border-radius:10px; background:var(--accent);
+  button.primary { width:100%; margin-top:22px; padding:13px; border:0; border-radius:10px; background:var(--brand-grad);
            color:#fff; font-size:16px; font-weight:600; cursor:pointer; }
-  button:disabled { opacity:.6; cursor:default; }
-  .error { background:rgba(239,68,68,.12); border:1px solid var(--bad); color:#fecaca;
+  button.primary:disabled { opacity:.6; cursor:default; }
+  .error { background:rgba(239,68,68,.12); border:1px solid var(--bad); color:var(--bad);
            padding:10px 12px; border-radius:8px; font-size:13px; margin-top:16px; display:none; }
   .foot { margin-top:20px; font-size:11px; color:var(--muted); text-align:center; }
-  .lock { font-size:34px; text-align:center; margin-bottom:8px; }
-  .exitwrap { margin-top:18px; text-align:center; border-top:1px solid var(--line); padding-top:14px; }
+  .exitwrap { margin-top:18px; text-align:center; border-top:1px solid var(--line); padding-top:14px;
+              display:flex; align-items:center; justify-content:space-between; }
   .exitlink { color:var(--muted); font-size:12px; text-decoration:none; cursor:pointer; }
   .exitlink:hover { color:var(--text); }
+  .themebtn { background:transparent; border:1px solid var(--line); color:var(--muted); border-radius:8px;
+              padding:5px 10px; cursor:pointer; font-size:12px; }
   .exitbox { display:none; margin-top:12px; }
   .exitbox input { width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--line);
-                   background:#0b1220; color:var(--text); font-size:14px; user-select:text; -webkit-user-select:text; }
-  .exitgo { margin-top:8px; width:100%; padding:9px; border:0; border-radius:8px; background:#334155;
-            color:#fff; font-weight:600; cursor:pointer; }
-  .exiterr { color:#fecaca; font-size:12px; margin-top:8px; min-height:14px; }
+                   background:var(--input); color:var(--text); font-size:14px; user-select:text; -webkit-user-select:text; }
+  .exitgo { margin-top:8px; width:100%; padding:9px; border:0; border-radius:8px; background:var(--line);
+            color:var(--text); font-weight:600; cursor:pointer; }
+  .exiterr { color:var(--bad); font-size:12px; margin-top:8px; min-height:14px; }
 </style>
 </head>
 <body>
   <form class="card" id="form" autocomplete="off">
-    <div class="lock">🔒</div>
+    <div class="logo"><span class="mark">E</span><span>Elite <span class="grad">Techlogix</span></span></div>
     <h1>Start your shift</h1>
     <div class="sub">Enter your work username and password to begin.</div>
     <label>Username</label>
@@ -45,16 +55,17 @@
     <label>Password</label>
     <input id="password" type="password" autocomplete="off">
     <div class="error" id="error"></div>
-    <button id="btn" type="submit">Log in &amp; open Dialer</button>
+    <button id="btn" class="primary" type="submit">Log in &amp; open Dialer</button>
     <div class="foot" id="foot"></div>
 
     <div class="exitwrap">
       <a href="#" id="exitLink" class="exitlink">Close kiosk</a>
-      <div id="exitBox" class="exitbox">
-        <input id="exitCode" type="password" placeholder="Enter exit code" autocomplete="off">
-        <button type="button" id="exitBtn" class="exitgo">Close</button>
-        <div class="exiterr" id="exitErr"></div>
-      </div>
+      <button type="button" id="themeBtn" class="themebtn">Theme</button>
+    </div>
+    <div id="exitBox" class="exitbox">
+      <input id="exitCode" type="password" placeholder="Enter exit code" autocomplete="off">
+      <button type="button" id="exitBtn" class="exitgo">Close</button>
+      <div class="exiterr" id="exitErr"></div>
     </div>
   </form>
 
@@ -65,6 +76,19 @@
 
   window.kiosk.info().then(i => {
     document.getElementById('foot').textContent = 'Machine: ' + i.machineId;
+  });
+
+  // Theme (dark/light), synced across all kiosk screens via the main process.
+  const themeBtn = document.getElementById('themeBtn');
+  function applyTheme(t) {
+    document.documentElement.setAttribute('data-theme', t === 'light' ? 'light' : 'dark');
+    themeBtn.textContent = t === 'light' ? '🌙 Dark' : '☀ Light';
+  }
+  window.kiosk.getTheme().then(applyTheme);
+  window.kiosk.onTheme(applyTheme);
+  themeBtn.addEventListener('click', () => {
+    const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    window.kiosk.setTheme(next);
   });
 
   // Ensure the username field is focused when returning here after logout.

@@ -7,8 +7,12 @@ function esc(s) {
 }
 
 const STYLE = `
-  :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#e2e8f0; --muted:#94a3b8;
-          --accent:#3b82f6; --good:#22c55e; --bad:#ef4444; }
+  /* Elite Techlogix palette: dark base, indigo -> cyan accents. */
+  :root { --bg:#0b1120; --card:#131c30; --line:#263349; --text:#e6ebf5; --muted:#93a1b8;
+          --input:#0b1322; --accent:#5b68eb; --accent2:#28e1fd; --good:#22c55e; --bad:#ef4444;
+          --brand-grad: linear-gradient(135deg, #5b68eb, #28e1fd); }
+  :root[data-theme="light"] { --bg:#f4f6fb; --card:#ffffff; --line:#e3e8f0; --text:#141b2b; --muted:#5c6879;
+          --input:#ffffff; --accent:#4f5fe0; --accent2:#0bb6dc; --good:#16a34a; --bad:#dc2626; }
   * { box-sizing: border-box; }
   body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
          background:var(--bg); color:var(--text); }
@@ -28,24 +32,31 @@ const STYLE = `
   th,td { text-align:left; padding:10px 8px; border-bottom:1px solid var(--line); font-size:14px; }
   th { color:var(--muted); font-weight:600; }
   input, button, select { font:inherit; }
-  input[type=text], input[type=password], textarea { background:#0b1220; border:1px solid var(--line); color:var(--text);
+  input[type=text], input[type=password], textarea { background:var(--input); border:1px solid var(--line); color:var(--text);
         border-radius:8px; padding:9px 11px; width:100%; font:inherit; }
   textarea { resize:vertical; line-height:1.5; }
   .help { margin-top:10px; font-size:13px; color:var(--muted); line-height:1.7;
           background:rgba(59,130,246,.07); border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
-  code { background:#0b1220; border:1px solid var(--line); border-radius:5px; padding:1px 5px; font-size:12px; }
+  code { background:var(--input); border:1px solid var(--line); border-radius:5px; padding:1px 5px; font-size:12px; }
   .btn.small.danger { background:var(--bad); }
   .msgwrap { display:flex; gap:16px; align-items:flex-start; }
   .convlist { width:280px; min-width:280px; background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
   .conv-item { display:flex; justify-content:space-between; padding:11px 14px; border-bottom:1px solid var(--line);
                color:var(--text); text-decoration:none; font-size:14px; }
-  .conv-item:hover { background:#243044; }
-  .conv-item.active { background:rgba(59,130,246,.15); border-left:3px solid var(--accent); }
+  .conv-item:hover { background:rgba(91,104,235,.12); }
+  .conv-item.active { background:rgba(91,104,235,.15); border-left:3px solid var(--accent); }
   .msgview { flex:1; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; min-height:200px; }
   .amsg { padding:8px 0; border-bottom:1px solid var(--line); }
   .amsg-h { font-size:12px; margin-bottom:3px; }
   label { display:block; font-size:13px; color:var(--muted); margin:10px 0 4px; }
-  .btn { background:var(--accent); color:#fff; border:0; border-radius:8px; padding:9px 14px; cursor:pointer; font-weight:600; }
+  .btn { background:var(--brand-grad); color:#fff; border:0; border-radius:8px; padding:9px 14px; cursor:pointer; font-weight:600; }
+  /* Logo + theme toggle */
+  .logo { display:flex; align-items:center; gap:10px; font-weight:700; font-size:17px; color:var(--text); }
+  .logo .mark { width:30px; height:30px; border-radius:8px; background:var(--brand-grad); display:flex;
+                align-items:center; justify-content:center; color:#fff; font-weight:800; font-size:17px; flex:none; }
+  .logo .grad { background:var(--brand-grad); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .themebtn { background:transparent; border:1px solid var(--line); color:var(--text); border-radius:8px;
+              padding:6px 10px; cursor:pointer; font-size:13px; margin-right:16px; }
   .btn.small { padding:5px 10px; font-size:13px; }
   .btn.ghost { background:transparent; border:1px solid var(--line); color:var(--text); }
   .btn.danger { background:var(--bad); }
@@ -60,41 +71,50 @@ const STYLE = `
   form.inline input { width:140px; }
 `;
 
+// Reusable inline wordmark logo + theme bootstrap (shared by all admin pages).
+const LOGO = `<span class="logo"><span class="mark">E</span><span>Elite <span class="grad">Techlogix</span></span></span>`;
+const THEME_HEAD = `<script>(function(){try{var t=localStorage.getItem('elite-theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+function toggleTheme(){var c=document.documentElement.getAttribute('data-theme')==='light'?'dark':'light';document.documentElement.setAttribute('data-theme',c);try{localStorage.setItem('elite-theme',c);}catch(e){}var b=document.getElementById('themebtn');if(b)b.textContent=c==='light'?'\\u{1F319} Dark':'\\u2600 Light';}</script>`;
+const THEME_INIT = `<script>(function(){var b=document.getElementById('themebtn');if(b)b.textContent=(document.documentElement.getAttribute('data-theme')==='light')?'\\u{1F319} Dark':'\\u2600 Light';})();</script>`;
+
 function layout(title, admin, body) {
   const nav = (href, label, active) =>
     `<a href="${href}" class="${active ? 'active' : ''}">${label}</a>`;
   return `<!doctype html><html><head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>${esc(title)} · DialerKiosk</title><style>${STYLE}</style></head><body>
+    <title>${esc(title)} · Elite Techlogix</title>${THEME_HEAD}<style>${STYLE}</style></head><body>
     <header class="top">
-      <div class="brand">🔒 DialerKiosk Admin</div>
+      ${LOGO}
       <nav>
         ${nav('/admin', 'Dashboard', title === 'Dashboard')}
         ${nav('/admin/employees', 'Employees', title === 'Employees')}
         ${nav('/admin/rooms', 'Rooms', title === 'Rooms')}
         ${nav('/admin/messages', 'Messages', title === 'Messages')}
+        <button id="themebtn" class="themebtn" onclick="toggleTheme()">Theme</button>
         <form action="/admin/logout" method="post" style="display:inline">
           <button class="btn ghost small">Log out (${esc(admin.username)})</button>
         </form>
       </nav>
     </header>
-    <div class="wrap">${body}</div></body></html>`;
+    <div class="wrap">${body}</div>${THEME_INIT}</body></html>`;
 }
 
 function adminLoginPage(error) {
   return `<!doctype html><html><head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Sign in · DialerKiosk</title><style>${STYLE}
-    .login { max-width:360px; margin:10vh auto; }</style></head><body>
+    <title>Sign in · Elite Techlogix</title>${THEME_HEAD}<style>${STYLE}
+    .login { max-width:380px; margin:9vh auto; }
+    .login .logo { justify-content:center; font-size:20px; margin-bottom:18px; }</style></head><body>
     <div class="login card">
-      <h2 style="margin-top:0">🔒 DialerKiosk Admin</h2>
+      ${LOGO}
       ${error ? `<div class="flash" style="border-color:var(--bad);background:rgba(239,68,68,.12)">${esc(error)}</div>` : ''}
       <form method="post" action="/admin/login">
         <label>Username</label><input type="text" name="username" autofocus>
         <label>Password</label><input type="password" name="password">
         <div style="margin-top:16px"><button class="btn" style="width:100%">Sign in</button></div>
       </form>
-    </div></body></html>`;
+      <div style="text-align:center;margin-top:16px"><button id="themebtn" class="themebtn" onclick="toggleTheme()" style="margin:0">Theme</button></div>
+    </div>${THEME_INIT}</body></html>`;
 }
 
 function renderPage(page, admin, data) {

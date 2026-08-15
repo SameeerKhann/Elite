@@ -9,4 +9,7 @@ contextBridge.exposeInMainWorld('chat', {
   list: (to, sinceId) => ipcRenderer.invoke('chat:list', { to, sinceId }),
   markRead: (to) => ipcRenderer.invoke('chat:read', to),
   setUnread: (n) => ipcRenderer.invoke('chat:unread', n), // badge the tab
+  getTheme: () => ipcRenderer.invoke('kiosk:getTheme'),
+  setTheme: (t) => ipcRenderer.invoke('kiosk:setTheme', t),
+  onTheme: (cb) => ipcRenderer.on('theme', (_e, t) => cb(t)),
 });
