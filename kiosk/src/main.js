@@ -21,7 +21,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const http = require('http');
 const https = require('https');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawn } = require('child_process');
 
 const CONFIG = loadConfig();
 const TOP_BAR_HEIGHT = 44;
@@ -91,7 +91,7 @@ function apiRequest(method, urlPath, body) {
         'Content-Type': 'application/json',
         ...(data ? { 'Content-Length': data.length } : {}),
       },
-      timeout: 10000,
+      timeout: 30000,
     }, res => {
       let chunks = '';
       res.on('data', c => (chunks += c));
@@ -183,11 +183,23 @@ function showLogin() {
   currentNotes = '';
   currentTabs = [];
   if (mainWindow) destroyTabViews();
+  try { mainWindow.setBrowserView(null); } catch {}
   mainWindow.loadFile(path.join(__dirname, 'login.html'))
     .then(() => {
-      // Give keyboard focus back to the login page — without this the username
-      // and password fields won't accept typing after a BrowserView was removed.
-      try { mainWindow.focus(); mainWindow.webContents.focus(); } catch {}
+      // Force keyboard focus back to the login page. Without the blur/focus
+      // cycle, after a BrowserView is removed the OS leaves focus orphaned and
+      // the username/password fields won't accept typing until you alt-tab.
+      const refocus = () => {
+        try {
+          if (!mainWindow || mainWindow.isDestroyed()) return;
+          mainWindow.blur();
+          mainWindow.focus();
+          mainWindow.webContents.focus();
+        } catch {}
+      };
+      refocus();
+      setTimeout(refocus, 120);
+      setTimeout(refocus, 400);
     })
     .catch(err => log('showLogin load error', err.message));
 }
@@ -382,10 +394,31 @@ ipcMain.handle('kiosk:setTheme', (_e, t) => {
 
 // Secret exit code entered on the login screen: releases the machine and quits.
 ipcMain.handle('kiosk:exit', async () => {
-  log('exit code accepted — releasing kiosk and quitting');
+  log('exit code accepted — releasing to normal Windows');
   try { if (currentToken) await apiRequest('POST', '/api/kiosk/logout', { token: currentToken }); } catch {}
-  if (CONFIG.kioskMode) revertKioskHardening();
   allowExit = true;
+
+  if (CONFIG.kioskMode) {
+    // This app is the Windows shell. Quitting would end the session (black
+    // screen), so instead: undo the lockdown, launch the normal Windows
+    // desktop (Explorer), and step our window aside while STAYING ALIVE so the
+    // session keeps running. Reboot returns to the locked kiosk.
+    revertKioskHardening();
+    try { globalShortcut.unregisterAll(); } catch {}
+    try { spawn('explorer.exe', { detached: true, stdio: 'ignore' }).unref(); } catch (e) { log('explorer launch failed', e.message); }
+    try {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.setKiosk(false);
+        mainWindow.setAlwaysOnTop(false);
+        mainWindow.setClosable(true);
+        mainWindow.setFullScreen(false);
+        mainWindow.hide();
+      }
+    } catch (e) { log('release window failed', e.message); }
+    return { ok: true };
+  }
+
+  // Non-kiosk (local testing) mode: just quit.
   app.exit(0);
   return { ok: true };
 });
