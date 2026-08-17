@@ -151,38 +151,22 @@ function renderPage(page, admin, data) {
         ${data.agentDownloadUrl
           ? `<a class="btn" href="${esc(data.agentDownloadUrl)}" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none">⬇ Download Agent App</a>`
           : `<p class="muted"><i>No installer link set yet — paste the download URL below and Save.</i></p>`}
-        <h4 style="margin:20px 0 8px;font-size:14px">Install on a PC (run once per computer)</h4>
+        <h4 style="margin:20px 0 8px;font-size:14px">Set up or update a PC</h4>
         <ol class="steps">
-          <li>On the PC, sign in as an <b>Administrator</b>.</li>
+          <li>Sign in to the PC with your <b>Administrator</b> account.</li>
           <li>Open <b>PowerShell as Administrator</b> (Start → type "PowerShell" → right-click → <b>Run as administrator</b>).</li>
-          <li>Click <b>Copy</b> below, paste into PowerShell, and press <b>Enter</b>.</li>
-          <li><b>Reboot.</b> The PC boots straight into the locked Elite app.</li>
+          <li>Click <b>Copy</b> below, paste into PowerShell, press <b>Enter</b>.</li>
+          <li>Answer the prompts: <b>Install</b> or <b>Update</b>; for Install, the <b>agent account name + password</b> and whether to auto-login.</li>
+          <li><b>Sign out or reboot.</b> Log into the <b>agent account</b> to use the locked kiosk; your admin account stays normal Windows.</li>
         </ol>
         <div class="codeblock">
-          <button type="button" class="copybtn" onclick="copyCode(this,'installCmds')">Copy</button>
-<pre id="installCmds">Set-ExecutionPolicy Bypass -Scope Process -Force
-Invoke-WebRequest "https://github.com/SameeerKhann/elite-agent/releases/download/v0.1.0/Install-Elite.ps1" -OutFile "$env:TEMP\\Install-Elite.ps1" -UseBasicParsing
-&amp; "$env:TEMP\\Install-Elite.ps1"</pre>
+          <button type="button" class="copybtn" onclick="copyCode(this,'setupCmds')">Copy</button>
+<pre id="setupCmds">Set-ExecutionPolicy Bypass -Scope Process -Force
+Invoke-WebRequest "https://github.com/SameeerKhann/elite-agent/releases/download/v0.1.0/Setup-Elite.ps1" -OutFile "$env:TEMP\\Setup-Elite.ps1" -UseBasicParsing
+&amp; "$env:TEMP\\Setup-Elite.ps1"</pre>
         </div>
         <p class="muted" style="font-size:12px;margin-top:8px">
-          Each PC automatically gets its own unique kiosk account. <b>Keep a separate Administrator account on every PC</b> — that's your way back in (sign-in screen → Ctrl+Alt+Del → Switch user). Test on one spare PC first.
-        </p>
-
-        <h4 style="margin:20px 0 8px;font-size:14px">Update a PC that's already installed</h4>
-        <ol class="steps">
-          <li>On the PC, press <b>Ctrl+Alt+Del → Sign out</b>, then sign in as your <b>Administrator</b> account.</li>
-          <li>Open <b>PowerShell as Administrator</b>.</li>
-          <li>Click <b>Copy</b> below, paste, and press <b>Enter</b>.</li>
-          <li><b>Reboot.</b> The PC comes back running the latest version.</li>
-        </ol>
-        <div class="codeblock">
-          <button type="button" class="copybtn" onclick="copyCode(this,'updateCmds')">Copy</button>
-<pre id="updateCmds">Set-ExecutionPolicy Bypass -Scope Process -Force
-Invoke-WebRequest "https://github.com/SameeerKhann/elite-agent/releases/download/v0.1.0/Update-Elite.ps1" -OutFile "$env:TEMP\\Update-Elite.ps1" -UseBasicParsing
-&amp; "$env:TEMP\\Update-Elite.ps1"</pre>
-        </div>
-        <p class="muted" style="font-size:12px;margin-top:8px">
-          Updating only swaps in the new app files — it never changes the kiosk account or lockdown. Re-run this whenever a new version is released.
+          The command asks what to do when it runs. It sets up a separate <b>agent</b> Windows account as the locked kiosk and leaves your admin account a normal desktop. Agents then sign in with their own Elite login (created under Employees). <b>Keep your admin account safe</b> — it's how you get back in. Test on one spare PC first.
         </p>
 
         <hr style="border:0;border-top:1px solid var(--line);margin:18px 0">
