@@ -20,13 +20,46 @@ function Set-Reg($Path, $Name, $Value, $Type = 'DWord') {
   if (-not (Test-Path $Path)) { New-Item -Path $Path -Force | Out-Null }
   New-ItemProperty -Path $Path -Name $Name -Value $Value -PropertyType $Type -Force | Out-Null
 }
-function Get-AppZip {
+
+# Download + extract + verify to a STAGING folder. Returns the folder that holds
+# the app files. Never touches the live install until we know we have a good
+# complete copy, so a bad download can't break an existing kiosk.
+function Get-StagedApp {
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-  $zip = Join-Path $env:TEMP 'Elite-Agent.zip'
-  Write-Host "Downloading the app (about 100 MB)..." -ForegroundColor Cyan
-  Invoke-WebRequest -Uri $DownloadZip -OutFile $zip -UseBasicParsing
-  if ((Get-Item $zip).Length -lt 1000000) { throw "Download too small - GitHub may be temporarily unavailable. Try again shortly." }
-  return $zip
+  $stageRoot = Join-Path $env:TEMP ('Elite-stage-' + [guid]::NewGuid().ToString('N'))
+  $ok = $false
+  for ($try = 1; $try -le 3 -and -not $ok; $try++) {
+    $zip = Join-Path $env:TEMP ('Elite-Agent-' + [guid]::NewGuid().ToString('N') + '.zip')
+    try {
+      Write-Host "Downloading the app (about 100 MB) - attempt $try ..." -ForegroundColor Cyan
+      Invoke-WebRequest -Uri $DownloadZip -OutFile $zip -UseBasicParsing
+      $sz = (Get-Item $zip).Length
+      if ($sz -lt 90000000) { throw ("Download incomplete: {0} MB (expected ~100 MB)." -f [math]::Round($sz / 1MB)) }
+      if (Test-Path $stageRoot) { Remove-Item $stageRoot -Recurse -Force }
+      Expand-Archive -Path $zip -DestinationPath $stageRoot -Force
+      $exe = Get-ChildItem -Path $stageRoot -Recurse -Filter 'Elite Agent.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+      if (-not $exe) { throw "App exe missing after extract." }
+      $ok = $true
+    } catch {
+      Write-Host ("  attempt {0} failed: {1}" -f $try, $_.Exception.Message) -ForegroundColor Yellow
+      if (Test-Path $stageRoot) { Remove-Item $stageRoot -Recurse -Force -ErrorAction SilentlyContinue }
+      Start-Sleep -Seconds 3
+    } finally {
+      Remove-Item $zip -Force -ErrorAction SilentlyContinue
+    }
+  }
+  if (-not $ok) { throw "Could not download a complete copy of the app after 3 tries. Check this PC's internet and run again." }
+  $exe = Get-ChildItem -Path $stageRoot -Recurse -Filter 'Elite Agent.exe' | Select-Object -First 1
+  return $exe.Directory.FullName
+}
+
+# Atomically replace the install directory with a freshly staged copy.
+function Swap-Install($appDir) {
+  if (Test-Path $InstallDir) { Remove-Item $InstallDir -Recurse -Force }
+  Move-Item -Path $appDir -Destination $InstallDir
+  $exe = Join-Path $InstallDir 'Elite Agent.exe'
+  if (-not (Test-Path $exe)) { throw "App not in place after install: $exe" }
+  return $exe
 }
 
 try {
@@ -40,17 +73,15 @@ try {
   $action = (Read-Host "Enter 1 or 2").Trim()
 
   if ($action -eq '2') {
-    # ---- UPDATE ----
+    # ---- UPDATE (download + verify FIRST, then swap) ----
     if (-not (Test-Path $InstallDir)) { throw "Elite is not installed yet. Choose Install (1) first." }
+    $appDir = Get-StagedApp
     $prevAuto = (Get-ItemProperty -Path $wl -Name AutoAdminLogon -ErrorAction SilentlyContinue).AutoAdminLogon
     Set-ItemProperty -Path $wl -Name AutoAdminLogon -Value "0"
     Write-Host "Stopping the running app..."
     taskkill /F /IM "Elite Agent.exe" 2>$null | Out-Null
     Start-Sleep -Seconds 3
-    $zip = Get-AppZip
-    Write-Host "Installing update..."
-    Expand-Archive -Path $zip -DestinationPath $InstallDir -Force
-    Remove-Item $zip -Force -ErrorAction SilentlyContinue
+    Swap-Install $appDir | Out-Null
     if ($prevAuto) { Set-ItemProperty -Path $wl -Name AutoAdminLogon -Value $prevAuto }
     Write-Host ""
     Write-Host "UPDATED. Reboot the PC to run the new version." -ForegroundColor Green
@@ -65,13 +96,8 @@ try {
   if ([string]::IsNullOrWhiteSpace($pwPlain)) { throw "A password is required." }
   $autoLogin = ((Read-Host "Auto-login straight into the kiosk at startup? (y/N)").Trim() -match '^[Yy]')
 
-  $zip = Get-AppZip
-  Write-Host "Installing to $InstallDir ..."
-  if (Test-Path $InstallDir) { Remove-Item $InstallDir -Recurse -Force }
-  Expand-Archive -Path $zip -DestinationPath $InstallDir -Force
-  Remove-Item $zip -Force -ErrorAction SilentlyContinue
-  $AppPath = Join-Path $InstallDir 'Elite Agent.exe'
-  if (-not (Test-Path $AppPath)) { throw "App not found after install: $AppPath" }
+  $appDir = Get-StagedApp
+  $AppPath = Swap-Install $appDir
   Write-Host "Installed: $AppPath" -ForegroundColor Green
 
   # Create / update the agent account with the password you chose.
@@ -85,7 +111,6 @@ try {
   }
   $sid = (New-Object Security.Principal.NTAccount($KioskUser)).Translate([Security.Principal.SecurityIdentifier]).Value
 
-  # Make the app the shell for the agent account (no desktop / taskbar).
   if (-not (Test-Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$sid")) {
     Write-Host "Priming the agent profile..."
     $cred = New-Object System.Management.Automation.PSCredential($KioskUser, $secure)
@@ -108,8 +133,6 @@ try {
   Set-Reg $polExp "NoClose" 1
   if ($hiveLoaded) { [gc]::Collect(); reg unload "HKU\$sid" | Out-Null }
 
-  # Auto-login only if requested. Otherwise the sign-in screen lets you pick
-  # your admin account (normal Windows) or the agent account (kiosk).
   if ($autoLogin) {
     Set-Reg $wl "AutoAdminLogon" "1" 'String'
     Set-Reg $wl "DefaultUserName" $KioskUser 'String'
@@ -133,5 +156,6 @@ try {
 catch {
   Write-Host ""
   Write-Host "SETUP FAILED: $($_.Exception.Message)" -ForegroundColor Red
+  Write-Host "Your existing install was left untouched. Fix the issue and run again." -ForegroundColor Yellow
   exit 1
 }
