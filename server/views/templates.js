@@ -159,13 +159,30 @@ function renderPage(page, admin, data) {
           <li><b>Reboot.</b> The PC boots straight into the locked Elite app.</li>
         </ol>
         <div class="codeblock">
-          <button type="button" class="copybtn" onclick="copyInstall(this)">Copy</button>
+          <button type="button" class="copybtn" onclick="copyCode(this,'installCmds')">Copy</button>
 <pre id="installCmds">Set-ExecutionPolicy Bypass -Scope Process -Force
 Invoke-WebRequest "https://github.com/SameeerKhann/elite-agent/releases/download/v0.1.0/Install-Elite.ps1" -OutFile "$env:TEMP\\Install-Elite.ps1" -UseBasicParsing
 &amp; "$env:TEMP\\Install-Elite.ps1"</pre>
         </div>
         <p class="muted" style="font-size:12px;margin-top:8px">
           Each PC automatically gets its own unique kiosk account. <b>Keep a separate Administrator account on every PC</b> — that's your way back in (sign-in screen → Ctrl+Alt+Del → Switch user). Test on one spare PC first.
+        </p>
+
+        <h4 style="margin:20px 0 8px;font-size:14px">Update a PC that's already installed</h4>
+        <ol class="steps">
+          <li>On the PC, press <b>Ctrl+Alt+Del → Sign out</b>, then sign in as your <b>Administrator</b> account.</li>
+          <li>Open <b>PowerShell as Administrator</b>.</li>
+          <li>Click <b>Copy</b> below, paste, and press <b>Enter</b>.</li>
+          <li><b>Reboot.</b> The PC comes back running the latest version.</li>
+        </ol>
+        <div class="codeblock">
+          <button type="button" class="copybtn" onclick="copyCode(this,'updateCmds')">Copy</button>
+<pre id="updateCmds">Set-ExecutionPolicy Bypass -Scope Process -Force
+Invoke-WebRequest "https://github.com/SameeerKhann/elite-agent/releases/download/v0.1.0/Update-Elite.ps1" -OutFile "$env:TEMP\\Update-Elite.ps1" -UseBasicParsing
+&amp; "$env:TEMP\\Update-Elite.ps1"</pre>
+        </div>
+        <p class="muted" style="font-size:12px;margin-top:8px">
+          Updating only swaps in the new app files — it never changes the kiosk account or lockdown. Re-run this whenever a new version is released.
         </p>
 
         <hr style="border:0;border-top:1px solid var(--line);margin:18px 0">
@@ -176,13 +193,14 @@ Invoke-WebRequest "https://github.com/SameeerKhann/elite-agent/releases/download
         </form>
       </div>
       <script>
-        function copyInstall(btn){
-          var text = document.getElementById('installCmds').innerText;
+        function copyCode(btn, id){
+          var el = document.getElementById(id);
+          var text = el.innerText;
           function done(){ var o = btn.textContent; btn.textContent = 'Copied!'; setTimeout(function(){ btn.textContent = o; }, 1500); }
+          function selectText(){ var r = document.createRange(); r.selectNodeContents(el); var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); try { document.execCommand('copy'); done(); } catch(e){} }
           if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(text).then(done).catch(selectText);
           } else { selectText(); }
-          function selectText(){ var r = document.createRange(); r.selectNodeContents(document.getElementById('installCmds')); var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); try { document.execCommand('copy'); done(); } catch(e){} }
         }
       </script>
 
