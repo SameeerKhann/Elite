@@ -38,6 +38,14 @@ const STYLE = `
   .help { margin-top:10px; font-size:13px; color:var(--muted); line-height:1.7;
           background:rgba(59,130,246,.07); border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
   code { background:var(--input); border:1px solid var(--line); border-radius:5px; padding:1px 5px; font-size:12px; }
+  .codeblock { position:relative; margin-top:6px; }
+  .codeblock pre { background:var(--input); border:1px solid var(--line); border-radius:8px; padding:14px; margin:0;
+                   overflow-x:auto; font-family:ui-monospace,Consolas,monospace; font-size:12.5px; line-height:1.7;
+                   color:var(--text); white-space:pre; }
+  .copybtn { position:absolute; top:8px; right:8px; background:var(--brand-grad); color:#fff; border:0; border-radius:6px;
+             padding:5px 12px; font-size:12px; font-weight:600; cursor:pointer; }
+  .steps { margin:0 0 10px 18px; padding:0; line-height:1.9; font-size:13px; color:var(--muted); }
+  .steps b { color:var(--text); }
   .btn.small.danger { background:var(--bad); }
   .msgwrap { display:flex; gap:16px; align-items:flex-start; }
   .convlist { width:280px; min-width:280px; background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
@@ -143,12 +151,40 @@ function renderPage(page, admin, data) {
         ${data.agentDownloadUrl
           ? `<a class="btn" href="${esc(data.agentDownloadUrl)}" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none">⬇ Download Agent App</a>`
           : `<p class="muted"><i>No installer link set yet — paste the download URL below and Save.</i></p>`}
-        <form method="post" action="/admin/agent-download" style="margin-top:12px">
-          <label>Installer download URL</label>
+        <h4 style="margin:20px 0 8px;font-size:14px">Install on a PC (run once per computer)</h4>
+        <ol class="steps">
+          <li>On the PC, sign in as an <b>Administrator</b>.</li>
+          <li>Open <b>PowerShell as Administrator</b> (Start → type "PowerShell" → right-click → <b>Run as administrator</b>).</li>
+          <li>Click <b>Copy</b> below, paste into PowerShell, and press <b>Enter</b>.</li>
+          <li><b>Reboot.</b> The PC boots straight into the locked Elite app.</li>
+        </ol>
+        <div class="codeblock">
+          <button type="button" class="copybtn" onclick="copyInstall(this)">Copy</button>
+<pre id="installCmds">Set-ExecutionPolicy Bypass -Scope Process -Force
+Invoke-WebRequest "https://github.com/SameeerKhann/elite-agent/releases/download/v0.1.0/Install-Elite.ps1" -OutFile "$env:TEMP\\Install-Elite.ps1" -UseBasicParsing
+&amp; "$env:TEMP\\Install-Elite.ps1"</pre>
+        </div>
+        <p class="muted" style="font-size:12px;margin-top:8px">
+          Each PC automatically gets its own unique kiosk account. <b>Keep a separate Administrator account on every PC</b> — that's your way back in (sign-in screen → Ctrl+Alt+Del → Switch user). Test on one spare PC first.
+        </p>
+
+        <hr style="border:0;border-top:1px solid var(--line);margin:18px 0">
+        <form method="post" action="/admin/agent-download">
+          <label>Installer download URL (advanced — the .exe zip location)</label>
           <input type="text" name="agent_download_url" value="${esc(data.agentDownloadUrl || '')}" placeholder="https://…/Elite-Agent.zip">
           <div style="margin-top:10px"><button class="btn ghost">Save download link</button></div>
         </form>
       </div>
+      <script>
+        function copyInstall(btn){
+          var text = document.getElementById('installCmds').innerText;
+          function done(){ var o = btn.textContent; btn.textContent = 'Copied!'; setTimeout(function(){ btn.textContent = o; }, 1500); }
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done).catch(selectText);
+          } else { selectText(); }
+          function selectText(){ var r = document.createRange(); r.selectNodeContents(document.getElementById('installCmds')); var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); try { document.execCommand('copy'); done(); } catch(e){} }
+        }
+      </script>
 
       <div class="card">
         <h3 style="margin-top:0">Kiosk settings</h3>
