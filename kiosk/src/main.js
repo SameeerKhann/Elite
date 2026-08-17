@@ -135,7 +135,10 @@ function createWindow() {
     },
   });
 
-  mainWindow.once('ready-to-show', () => mainWindow.show());
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+    try { mainWindow.focus(); mainWindow.webContents.focus(); } catch {}
+  });
 
   // In kiosk mode the window can NEVER be closed except via the secret exit
   // code (which sets allowExit). Blocks Alt+F4, the X, everything.
@@ -143,7 +146,14 @@ function createWindow() {
     if (CONFIG.kioskMode && !allowExit) { e.preventDefault(); }
   });
 
-  showLogin();
+  loadLoginPage();
+}
+
+// Load the login page into the current (fresh) window.
+function loadLoginPage() {
+  mainWindow.loadFile(path.join(__dirname, 'login.html'))
+    .then(() => { try { mainWindow.focus(); mainWindow.webContents.focus(); } catch {} })
+    .catch(err => log('login load error', err.message));
 }
 
 // --- Kiosk hardening (Windows, per-user, no admin needed, all reversible) ---
@@ -182,26 +192,34 @@ function showLogin() {
   currentToken = null;
   currentNotes = '';
   currentTabs = [];
-  if (mainWindow) destroyTabViews();
-  try { mainWindow.setBrowserView(null); } catch {}
-  mainWindow.loadFile(path.join(__dirname, 'login.html'))
-    .then(() => {
-      // Force keyboard focus back to the login page. Without the blur/focus
-      // cycle, after a BrowserView is removed the OS leaves focus orphaned and
-      // the username/password fields won't accept typing until you alt-tab.
-      const refocus = () => {
-        try {
-          if (!mainWindow || mainWindow.isDestroyed()) return;
-          mainWindow.blur();
-          mainWindow.focus();
-          mainWindow.webContents.focus();
-        } catch {}
-      };
-      refocus();
-      setTimeout(refocus, 120);
-      setTimeout(refocus, 400);
-    })
-    .catch(err => log('showLogin load error', err.message));
+  currentEmployee = null;
+  activeTab = 0;
+
+  // Return to login by REPLACING the window with a fresh one. Reloading login
+  // in place leaves keyboard focus orphaned after the tab BrowserViews are
+  // removed (caret blinks but typing does nothing until you alt-tab). A brand
+  // new window always receives focus cleanly.
+  const old = mainWindow;
+  if (old && !old.isDestroyed()) {
+    try {
+      for (const v of old.getBrowserViews()) {
+        try { old.removeBrowserView(v); } catch {}
+        try { if (v.webContents && !v.webContents.isDestroyed()) v.webContents.destroy(); } catch {}
+      }
+    } catch {}
+  }
+  tabViews = [];
+
+  createWindow(); // sets mainWindow to a fresh window on the login page
+  const fresh = mainWindow;
+
+  // Destroy the old window only once the new one is visible — this avoids a
+  // black flash and ensures window-all-closed never fires (which would quit).
+  const killOld = () => {
+    if (old && !old.isDestroyed()) { try { old.removeAllListeners('close'); old.destroy(); } catch {} }
+  };
+  if (fresh && !fresh.isDestroyed()) { fresh.once('ready-to-show', killOld); setTimeout(killOld, 1500); }
+  else { killOld(); }
 }
 
 // Open the agent workspace: the shell (top bar + notes panel) plus one locked
