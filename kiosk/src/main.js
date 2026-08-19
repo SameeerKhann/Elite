@@ -25,7 +25,7 @@ const { execFileSync, spawn } = require('child_process');
 
 const CONFIG = loadConfig();
 const TOP_BAR_HEIGHT = 44;
-const EXIT_CODE = 'closeelite99'; // typed on the login screen to release the kiosk
+// The exit code is not stored here — see verifyExitCode() below.
 
 let mainWindow = null;
 let tabViews = [];        // one BrowserView per configured tab (all live at once)
@@ -45,6 +45,47 @@ const LOG_FILE = path.join(__dirname, '..', 'kiosk.log');
 function log(...parts) {
   const line = `[${new Date().toISOString()}] ${parts.join(' ')}\n`;
   try { fs.appendFileSync(LOG_FILE, line); } catch {}
+}
+
+// --- Exit code (releases the kiosk back to a normal desktop) ----------------
+// The code itself is never stored. config.json holds only a random salt and a
+// scrypt hash of it, so the source and the shipped config reveal nothing that
+// unlocks a machine. Generate a pair with:
+//
+//     cd kiosk && npm run set-exit-code
+//
+// Verification belongs in the main process — renderers only forward input.
+const SCRYPT_KEYLEN = 32;
+let exitAttempts = 0;      // consecutive wrong codes
+let exitLockedUntil = 0;   // epoch ms; guessing is locked out until then
+
+function exitCodeConfigured() {
+  return !!(CONFIG.exitCodeSalt && CONFIG.exitCodeHash);
+}
+
+function verifyExitCode(input) {
+  if (!exitCodeConfigured()) return false;
+  const candidate = String(input == null ? '' : input);
+  if (!candidate) return false;
+  try {
+    const expected = Buffer.from(String(CONFIG.exitCodeHash), 'hex');
+    if (expected.length !== SCRYPT_KEYLEN) { log('exit code hash in config.json is malformed'); return false; }
+    const actual = crypto.scryptSync(candidate, String(CONFIG.exitCodeSalt), SCRYPT_KEYLEN);
+    return crypto.timingSafeEqual(expected, actual); // constant-time compare
+  } catch (e) {
+    log('exit code verification error', e.message);
+    return false;
+  }
+}
+
+// Escalating lockout so the code can't be guessed by someone standing at the PC.
+function exitLockRemainingMs() { return Math.max(0, exitLockedUntil - Date.now()); }
+function noteBadExitAttempt() {
+  exitAttempts += 1;
+  if (exitAttempts >= 5) {
+    const steps = Math.min(exitAttempts - 5, 4);           // cap the backoff
+    exitLockedUntil = Date.now() + 60000 * Math.pow(2, steps); // 1, 2, 4, 8, 16 min
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -410,13 +451,41 @@ ipcMain.handle('kiosk:setTheme', (_e, t) => {
   return { ok: true };
 });
 
-// Secret exit code entered on the login screen: releases the machine and quits.
-ipcMain.handle('kiosk:exit', async () => {
-  log('exit code accepted — releasing to normal Windows');
+// Lets the login screen know whether releasing is even possible on this PC,
+// and how long any guessing lockout still has to run.
+ipcMain.handle('kiosk:exitInfo', () => ({
+  configured: exitCodeConfigured(),
+  lockedMs: exitLockRemainingMs(),
+}));
+
+// Exit code entered on the login screen: releases the machine.
+ipcMain.handle('kiosk:exit', async (_e, code) => {
+  if (!exitCodeConfigured()) {
+    log('exit refused — no exit code is configured on this PC');
+    return { ok: false, error: 'No exit code is set on this PC. Use the Windows administrator account to service it.' };
+  }
+
+  const waitMs = exitLockRemainingMs();
+  if (waitMs > 0) {
+    log('exit refused — locked out for', Math.ceil(waitMs / 1000), 'more seconds');
+    return { ok: false, error: `Too many incorrect attempts. Try again in ${Math.ceil(waitMs / 60000)} min.` };
+  }
+
+  if (!verifyExitCode(code)) {
+    noteBadExitAttempt();
+    log('exit code rejected (consecutive failures:', exitAttempts + ')');
+    return { ok: false, error: 'Incorrect code.' };
+  }
+
+  exitAttempts = 0;
+  exitLockedUntil = 0;
+  log('exit code accepted — releasing the machine');
   try { if (currentToken) await apiRequest('POST', '/api/kiosk/logout', { token: currentToken }); } catch {}
   allowExit = true;
 
-  if (CONFIG.kioskMode) {
+  // The Windows release path only makes sense on Windows, where this app is the
+  // login shell. Everywhere else (a Mac used for testing) just quit normally.
+  if (CONFIG.kioskMode && process.platform === 'win32') {
     // This app is the Windows shell. Quitting would end the session (black
     // screen), so instead: undo the lockdown, launch the normal Windows
     // desktop (Explorer), and step our window aside while STAYING ALIVE so the

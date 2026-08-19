@@ -1,5 +1,7 @@
 {
   "serverUrl": "https://elite-l9b8.vercel.app",
   "kioskMode": true,
-  "allowDevTools": false
+  "allowDevTools": false,
+  "exitCodeSalt": "",
+  "exitCodeHash": ""
 }

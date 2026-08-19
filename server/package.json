@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "init-admin": "node scripts/create-admin.js"
+    "init-admin": "node scripts/create-admin.js",
+    "admins": "node scripts/admins.js"
   },
   "license": "UNLICENSED",
   "private": true,

@@ -5,12 +5,13 @@
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder --win"
+    "build": "electron-builder --win",
+    "set-exit-code": "node scripts/set-exit-code.js"
   },
   "license": "UNLICENSED",
   "private": true,
   "devDependencies": {
-    "electron": "^31.0.0",
+    "electron": "^43.4.1",
     "electron-builder": "^24.13.3"
   },
   "build": {
@@ -27,6 +28,12 @@
       "runAfterFinish": true,
       "createDesktopShortcut": false
     },
-    "files": ["src/**/*", "config.json"]
+    "files": [
+      "src/**/*",
+      "config.json"
+    ]
+  },
+  "allowScripts": {
+    "electron@43.4.1": true
   }
 }

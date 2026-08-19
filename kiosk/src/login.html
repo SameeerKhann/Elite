@@ -112,19 +112,38 @@
     exitBox.style.display = 'block';
     exitCode.focus();
   });
-  function tryExit() {
-    if (exitCode.value === 'closeelite99') { window.kiosk.exit(); }
-    else { exitErr.textContent = 'Incorrect code.'; exitCode.value = ''; exitCode.focus(); }
+  // Checked by the main process; this page only forwards what was typed.
+  let exiting = false;
+  async function tryExit() {
+    if (exiting) return;
+    exiting = true;
+    exitErr.textContent = '';
+    exitBtn.disabled = true;
+    try {
+      const res = await window.kiosk.exit(exitCode.value);
+      if (!res || !res.ok) {
+        exitErr.textContent = (res && res.error) || 'Incorrect code.';
+        exitCode.value = '';
+        exitCode.focus();
+      }
+    } catch (err) {
+      exitErr.textContent = 'Could not release the kiosk.';
+    } finally {
+      exitBtn.disabled = false;
+      exiting = false;
+    }
   }
   exitBtn.addEventListener('click', tryExit);
   exitCode.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); tryExit(); } });
 
-  // (Also still works as an invisible shortcut: type the code anywhere.)
-  let codeBuf = '';
-  window.addEventListener('keydown', (e) => {
-    if (e.key && e.key.length === 1) codeBuf = (codeBuf + e.key).slice(-32);
-    if (codeBuf.toLowerCase().endsWith('closeelite99')) { codeBuf = ''; window.kiosk.exit(); }
-  });
+  // Hide the option entirely on a PC that has no exit code configured, so
+  // nobody wastes time typing into a box that cannot work.
+  window.kiosk.exitInfo().then((i) => {
+    if (!i || !i.configured) {
+      exitLink.style.display = 'none';
+      exitBox.style.display = 'none';
+    }
+  }).catch(() => {});
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();

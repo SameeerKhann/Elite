@@ -132,17 +132,27 @@ async function init() {
 
   // Auto-create the first admin from env vars (needed on Vercel where you can't
   // run an interactive script). Only fires when there are zero admins.
-  if (process.env.ADMIN_USER && process.env.ADMIN_PASS && (await countAdmins()) === 0) {
-    const bcrypt = require('bcryptjs');
-    await createAdmin(String(process.env.ADMIN_USER).trim().toLowerCase(), bcrypt.hashSync(String(process.env.ADMIN_PASS), 10));
-    console.log(`Seeded admin "${process.env.ADMIN_USER}" from ADMIN_USER/ADMIN_PASS.`);
-  }
-
-  // Bootstrap admin — created only if NO admin exists yet (so it never
-  // overwrites a real one). Username "sam". Change this password soon.
+  //
+  // Admin accounts are only ever created deliberately — from these environment
+  // variables, or with `npm run init-admin`. Nothing is seeded automatically, so
+  // the panel stays unreachable until an operator sets an account up.
   if ((await countAdmins()) === 0) {
-    await createAdmin('sam', '$2a$10$UrIOaIO9ULb/lTS0C7FOCu.g8WyU99KsUSbxLLEqUG4r10qHyXIya'); // pw: Sam123
-    console.log('Seeded bootstrap admin "sam".');
+    const seedUser = String(process.env.ADMIN_USER || '').trim().toLowerCase();
+    const seedPass = String(process.env.ADMIN_PASS || '');
+    const placeholder = /^change[-_ ]?(this|me)/i.test(seedPass);
+
+    if (seedUser && seedPass && !placeholder && seedPass.length >= 12) {
+      const bcrypt = require('bcryptjs');
+      await createAdmin(seedUser, bcrypt.hashSync(seedPass, 10));
+      console.log(`[Elite] Seeded admin "${seedUser}" from ADMIN_USER/ADMIN_PASS.`);
+    } else {
+      if (seedUser && seedPass) {
+        console.warn('[Elite] REFUSING to seed an admin: ADMIN_PASS is the example placeholder or shorter than 12 characters.');
+      }
+      console.warn('[Elite] No admin account exists. The admin panel cannot be used until you create one:');
+      console.warn('[Elite]   locally  ->  cd server && npm run init-admin');
+      console.warn('[Elite]   on Vercel ->  set ADMIN_USER + ADMIN_PASS (12+ chars) and redeploy');
+    }
   }
 }
 
@@ -181,6 +191,15 @@ async function createAdmin(username, hash) {
 async function setAdminPassword(username, hash) {
   if (isPg) await pgAll('UPDATE admins SET password_hash = $1 WHERE username = $2', [hash, username]);
   else sqlRun('UPDATE admins SET password_hash = ? WHERE username = ?', [hash, username]);
+}
+async function listAdmins() {
+  const sql = 'SELECT id, username, created_at FROM admins ORDER BY username';
+  return isPg ? await pgAll(sql) : sqlAll(sql);
+}
+// Used by scripts/admins.js to manage accounts in an existing database.
+async function deleteAdmin(username) {
+  if (isPg) await pgAll('DELETE FROM admins WHERE username = $1', [username]);
+  else sqlRun('DELETE FROM admins WHERE username = ?', [username]);
 }
 
 // ---------------------------------------------------------------------------
@@ -389,7 +408,7 @@ async function listMessagesByThread(thread, limit = 500) {
 module.exports = {
   isPg, init,
   getSetting, setSetting,
-  getAdminByUsername, countAdmins, createAdmin, setAdminPassword,
+  getAdminByUsername, countAdmins, createAdmin, setAdminPassword, listAdmins, deleteAdmin,
   getEmployeeByUsername, listEmployees, employeeExists, createEmployee,
   setEmployeePassword, toggleEmployee, setNotes,
   createShift, closeShift,
